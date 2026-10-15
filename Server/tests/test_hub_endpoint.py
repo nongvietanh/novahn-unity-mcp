@@ -70,13 +70,18 @@ async def test_two_endpoints_isolate_identity_and_token() -> None:
 
         async with Client(f"http://127.0.0.1:{ports[0]}/mcp", auth=tokens[0]) as codex:
             names = [tool.name for tool in await codex.list_tools()]
-            assert {"hub.health", "hub.project.info", "unity.scenes.list",
+            assert {"hub.health", "hub.project.info", "hub.agents.list",
+                    "unity.scenes.list",
                     "hub.task.create", "hub.task.claim", "hub.task.complete",
                     "hub.task.cancel",
                     "hub.task.inbox", "hub.task.get", "hub.message.send",
                     "hub.message.inbox", "hub.message.ack"} == set(names)
             result = await codex.call_tool("hub.health")
             assert result.structured_content["agentId"] == "codex"
+            roster = (await codex.call_tool("hub.agents.list")).structured_content["data"]
+            assert roster["self"] == "codex"
+            assert roster["others"] == ["claude"]
+            assert set(roster["agents"]) == {"codex", "claude"}
             result = await codex.call_tool("unity.scenes.list")
             assert result.structured_content["data"]["scenes"] == ["Assets/Sample.unity"]
             created = (await codex.call_tool("hub.task.create", {

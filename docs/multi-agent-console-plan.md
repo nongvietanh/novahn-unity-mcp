@@ -163,3 +163,71 @@ Thuần thẩm mỹ, rủi ro thấp nhất → làm **sau cùng**.
 ## 5. Thứ tự thực thi đề xuất
 `G1 (backend transcript → Unity console → test)` → duyệt thực tế → `G2` → `G3`.
 Mỗi giai đoạn 1 commit/PR riêng trên nhánh tách từ `beta` (theo CLAUDE.md), kèm test xanh.
+
+**Trạng thái:** G1, G2, G3 đã xong và merge vào `main`.
+
+---
+
+# Giai đoạn 4 — Setup nhiều AI qua UI + chọn leader (B1)
+
+> Mục tiêu: trong cửa sổ Novahn, đăng ký nhiều AI cùng lúc (mỗi con là 1 agent
+> riêng có port + token), chọn 1 con làm **leader (điều phối)**, và bật/tắt
+> multi-agent hub ngay từ Editor. Quyết định đã chốt: transport mới **"Multi-Agent
+> Hub"**; phạm vi **B1** (chưa làm Coordinator skill).
+
+## 4.0. Giới hạn quan trọng của B1 (đọc kỹ)
+B1 làm xong **hạ tầng**: nhiều agent + bus chia task + chỉ định leader + console xem.
+Nhưng **leader CHƯA tự động lên plan & chia task** — đó là việc của LLM, cần
+**Coordinator skill** (dạy leader dùng `hub.task.create` để fan-out). Skill đó là
+**đợt sau (B2)**. Sau B1, bạn vẫn điều phối được nhưng phải **tự bảo leader** "chia
+task cho các agent X, Y qua hub"; nó chưa tự làm. B1 = cắm điện sẵn, B2 = bật công tắc tự động.
+
+## 4.1. Mô hình dữ liệu (Editor)
+`HubAgentRegistry` lưu danh sách agent (JSON trong `ProjectSettings/` hoặc EditorPrefs):
+mỗi agent `{ id, displayName, clientKey, port, token, isLeader }`.
+- `id`: khớp `^[a-z0-9_-]{1,32}$` (dùng cho env + bus).
+- `port`: tự cấp phát từ 4317 tăng dần, tránh trùng bridge (8080) và nhau.
+- `token`: tự sinh 48 ký tự URL-safe mỗi agent.
+- Đúng **một** agent `isLeader = true`.
+
+## 4.2. Backend — bật/tắt hub từ Editor
+`ServerManagementService` thêm đường chạy `python -m hub` (song song đường server đơn
+hiện có), truyền env từ registry:
+```
+UNITY_HUB_BRIDGE_URL=http://127.0.0.1:8080
+UNITY_HUB_AGENTS=<id1>:<port1>,<id2>:<port2>,...
+UNITY_HUB_TOKEN_<ID>=<token>   # mỗi agent một dòng
+```
+Hub tự dựng bridge (:8080 /hub/plugin) + từng agent endpoint; **WebSocket bridge của
+Unity nối tới /hub/plugin y như chế độ HTTP hiện tại** (không đổi phía Unity transport).
+Stop = kết thúc tiến trình hub.
+
+## 4.3. UI — chế độ "Multi-Agent Hub"
+- Dropdown **Transport** thêm mục `Multi-Agent Hub` (cạnh HTTP Local / stdio).
+- Chọn nó → hiện panel **Agents** mới (`McpHubAgentsSection`):
+  - Mỗi dòng agent: `displayName` · dropdown client (Codex/Claude Code/Cursor…) · `port`
+    · radio **Leader** · nút **Remove**.
+  - Nút **Add Agent**, **Configure All Agents**, **Start/Stop Hub**.
+  - **Configure All Agents**: với mỗi dòng, chạy configurator của client đó nhưng trỏ vào
+    **port + token của chính agent đó** (header `Authorization: Bearer <token>`), thay vì
+    server chung :8080.
+- Console G1 (`AI Console`) hiển thị luồng task leader→worker ngay.
+
+## 4.4. Thay đổi code chính
+- `ConfigJsonBuilder`: thêm overload ghi **url (port agent) + bearer token** thay cho url
+  chung. B1 nhắm các client **hỗ trợ HTTP + header** (Codex, Claude Code, Cursor); client
+  chỉ-stdio tạm chưa hỗ trợ gán port riêng.
+- `ServerManagementService`: `StartHub()/StopHub()` với env ở 4.2.
+- Mới: `HubAgentRegistry` (model + lưu) và `McpHubAgentsSection` (UI).
+- Transport enum/handling: thêm `MultiAgentHub`.
+
+## 4.5. Test
+- EditMode: cấp phát port không trùng; sinh token; ràng buộc đúng 1 leader; dựng chuỗi
+  env `UNITY_HUB_AGENTS` + các dòng token; JSON cấu hình mỗi agent (url+bearer đúng).
+- Python: đã phủ parse config đa-agent ở G2.
+- Compile-check đa nền tảng; mở Unity kiểm bằng mắt (UI + start/stop hub).
+
+## 4.6. Rủi ro
+- Mỗi client có định dạng config/bearer khác nhau → B1 giới hạn client HTTP; mở rộng sau.
+- Chạy `python -m hub` cần đúng uv/PYTHONPATH như đường server hiện tại (phức tạp vừa).
+- **Kỳ vọng "leader tự plan"**: không có trong B1 (cần B2 — Coordinator skill).

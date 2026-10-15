@@ -81,6 +81,14 @@ def create_endpoint(agent_id: str, token: str, port: int,
                     "correlationId": correlation_id,
                     "error": {"code": exc.code, "message": str(exc)}}
 
+    @mcp.tool(name="hub.agents.list", annotations={"readOnlyHint": True})
+    async def list_agents() -> dict[str, Any]:
+        return {"status": "succeeded", "agentId": agent_id,
+                "correlationId": str(uuid.uuid4()),
+                "data": {"self": agent_id,
+                         "agents": sorted(store.agents),
+                         "others": sorted(a for a in store.agents if a != agent_id)}}
+
     @mcp.tool(name="unity.scenes.list", annotations={"readOnlyHint": True})
     async def list_scenes(unity_instance: str | None = None) -> dict[str, Any]:
         correlation_id = str(uuid.uuid4())
