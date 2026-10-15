@@ -22,7 +22,7 @@ if not hasattr(fastmcp, "Client"):
 from fastmcp import Client
 
 from hub.bridge import BridgeError, UnityBridge
-from hub.config import HubConfig
+from hub.config import AgentSpec, HubConfig
 from hub.dashboard import HubDashboard
 from hub.bridge_endpoint import BridgeOnlyEndpoint
 from hub.endpoint import create_endpoint
@@ -127,10 +127,12 @@ async def test_two_endpoints_isolate_identity_and_token() -> None:
 
 
 def test_config_rejects_shared_tokens_and_non_loopback_bridge() -> None:
+    shared = (AgentSpec("codex", 4317, "a" * 40), AgentSpec("claude", 4318, "a" * 40))
     with pytest.raises(ValueError, match="differ"):
-        HubConfig("http://127.0.0.1:8080", 4317, 4318, "a" * 40, "a" * 40).validate()
+        HubConfig("http://127.0.0.1:8080", shared).validate()
+    distinct = (AgentSpec("codex", 4317, "a" * 40), AgentSpec("claude", 4318, "b" * 40))
     with pytest.raises(ValueError, match="loopback"):
-        HubConfig("http://example.com:8080", 4317, 4318, "a" * 40, "b" * 40).validate()
+        HubConfig("http://example.com:8080", distinct).validate()
 
 
 @pytest.mark.asyncio
@@ -159,7 +161,7 @@ async def test_editor_dashboard_exposes_metadata_without_task_bodies() -> None:
     task = store.create_task("codex", "claude", "private task body", "dash-task", "corr")
     store.send_message("codex", "claude", "private message body", "dash-message",
                        "corr-2", task["task_id"])
-    dashboard = HubDashboard(store, 4317, 4318)
+    dashboard = HubDashboard(store, {"codex": 4317, "claude": 4318})
     dashboard.record_agent_request("codex")
 
     async def inner(scope, receive, send):

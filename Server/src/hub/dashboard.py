@@ -10,10 +10,10 @@ from hub.store import HubStore
 
 
 class HubDashboard:
-    def __init__(self, store: HubStore, codex_port: int, claude_port: int):
+    def __init__(self, store: HubStore, ports: dict[str, int]):
         self.store = store
-        self.ports = {"codex": codex_port, "claude": claude_port}
-        self.last_seen: dict[str, float | None] = {"codex": None, "claude": None}
+        self.ports = dict(ports)
+        self.last_seen: dict[str, float | None] = {agent_id: None for agent_id in ports}
 
     def record_agent_request(self, agent_id: str) -> None:
         if agent_id in self.last_seen:

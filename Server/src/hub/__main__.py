@@ -31,16 +31,26 @@ async def serve(config: HubConfig) -> None:
     bridge_port = urlparse(config.bridge_url).port or 80
     bridge_token = secrets.token_urlsafe(48)
     bridge_mcp = create_mcp_server(project_scoped_tools=False)
-    store = HubStore(config.db_path)
-    dashboard = HubDashboard(store, config.codex_port, config.claude_port)
+    store = HubStore(config.db_path, {agent.id for agent in config.agents})
+    dashboard = HubDashboard(store, {agent.id: agent.port for agent in config.agents})
+
+    async def transcript(after: int, limit: int) -> dict:
+        data = store.transcript(after, limit)
+        data["agents"] = list(dashboard.ports)
+        return data
+
     bridge_app = BridgeOnlyEndpoint(
         bridge_mcp.http_app(path="/mcp", stateless_http=True),
         token=bridge_token, port=bridge_port, dashboard=dashboard.snapshot,
+        transcript=transcript,
     )
     bridge = UnityBridge(config.bridge_url, token=bridge_token)
     servers = []
     sockets = []
-    ports = (bridge_port, config.codex_port, config.claude_port)
+    # Order is fixed so sockets and servers stay aligned for zip() below.
+    endpoints = [("bridge", bridge_port, None)] + [
+        (agent.id, agent.port, agent.token) for agent in config.agents]
+    ports = tuple(port for _, port, _ in endpoints)
     try:
         for port in ports:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -53,11 +63,7 @@ async def serve(config: HubConfig) -> None:
         store.close()
         raise RuntimeError(f"Cannot reserve Hub ports {ports}: {exc}") from exc
 
-    for agent_id, port, token in (
-        ("bridge", bridge_port, None),
-        ("codex", config.codex_port, config.codex_token),
-        ("claude", config.claude_port, config.claude_token),
-    ):
+    for agent_id, port, token in endpoints:
         app = (bridge_app if agent_id == "bridge" else
                create_endpoint(agent_id, token, port, bridge, store,
                                on_authenticated=lambda agent=agent_id:
