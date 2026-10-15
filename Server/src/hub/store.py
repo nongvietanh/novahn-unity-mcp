@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-AGENTS = {"codex", "claude"}
+_DEFAULT_AGENTS = frozenset({"codex", "claude"})
 
 
 class StoreError(ValueError):
@@ -27,8 +27,15 @@ def _require_text(value: str, name: str, limit: int) -> None:
         raise StoreError("invalid_input", f"{name} must contain 1–{limit} characters")
 
 
+def _clip(value: str | None, limit: int) -> str:
+    if not value:
+        return ""
+    return value if len(value) <= limit else value[:limit] + "…"
+
+
 class HubStore:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, agents: set[str] | None = None):
+        self.agents = set(agents) if agents else set(_DEFAULT_AGENTS)
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(str(path))
@@ -90,6 +97,49 @@ class HubStore:
             "tasks": tasks,
         }
 
+    def transcript(self, after_seq: int = 0, limit: int = 200,
+                   snippet_limit: int = 2000) -> dict[str, Any]:
+        """Return the agent-to-agent timeline with bodies, for the AI Console view.
+
+        Uses the audit_events rowid as a monotonic cursor so the Editor can poll
+        incrementally: pass the previous nextCursor as after_seq to fetch only new
+        events. Bodies are clipped to snippet_limit so large payloads never flood
+        the console.
+        """
+        limit = max(1, min(int(limit), 500))
+        after_seq = max(0, int(after_seq))
+        rows = self.connection.execute(
+            "SELECT rowid AS seq, actor, kind, object_id, created_at "
+            "FROM audit_events WHERE rowid > ? ORDER BY rowid LIMIT ?",
+            (after_seq, limit)).fetchall()
+        events: list[dict[str, Any]] = []
+        next_cursor = after_seq
+        for row in rows:
+            next_cursor = row["seq"]
+            event: dict[str, Any] = {
+                "seq": row["seq"], "at": row["created_at"],
+                "actor": row["actor"], "kind": row["kind"],
+            }
+            if row["kind"].startswith("task."):
+                task = self.connection.execute(
+                    "SELECT creator, assignee, request, result, state "
+                    "FROM tasks WHERE task_id=?", (row["object_id"],)).fetchone()
+                if task is not None:
+                    body = task["result"] if row["kind"] == "task.completed" else task["request"]
+                    event.update(taskId=row["object_id"], creator=task["creator"],
+                                 assignee=task["assignee"], state=task["state"],
+                                 text=_clip(body, snippet_limit))
+            elif row["kind"].startswith("message."):
+                message = self.connection.execute(
+                    "SELECT sender, recipient, body, task_id "
+                    "FROM messages WHERE message_id=?", (row["object_id"],)).fetchone()
+                if message is not None:
+                    event.update(messageId=row["object_id"], sender=message["sender"],
+                                 recipient=message["recipient"], taskId=message["task_id"],
+                                 text=_clip(message["body"], snippet_limit))
+            events.append(event)
+        return {"events": events, "nextCursor": next_cursor}
+
     def _audit(self, correlation_id: str, actor: str, kind: str,
                object_id: str, now: float) -> None:
         self.connection.execute(
@@ -110,7 +160,7 @@ class HubStore:
 
     def create_task(self, creator: str, assignee: str, request: str,
                     idempotency_key: str, correlation_id: str) -> dict[str, Any]:
-        if assignee not in AGENTS:
+        if assignee not in self.agents:
             raise StoreError("invalid_assignee", "Unknown agent")
         _require_text(request, "request", 10000)
         _require_text(idempotency_key, "idempotency_key", 128)
@@ -209,7 +259,7 @@ class HubStore:
     def send_message(self, sender: str, recipient: str, body: str,
                      idempotency_key: str, correlation_id: str,
                      task_id: str | None = None) -> dict[str, Any]:
-        if recipient not in AGENTS:
+        if recipient not in self.agents:
             raise StoreError("invalid_recipient", "Unknown agent")
         _require_text(body, "body", 10000)
         _require_text(idempotency_key, "idempotency_key", 128)

@@ -4,17 +4,27 @@ from __future__ import annotations
 
 import hmac
 from typing import Any, Awaitable, Callable
+from urllib.parse import parse_qs
 
 from starlette.responses import JSONResponse, PlainTextResponse
 
 
+def _query_int(query: dict[str, list[str]], name: str, default: int) -> int:
+    try:
+        return int(query.get(name, [str(default)])[0])
+    except (ValueError, IndexError):
+        return default
+
+
 class BridgeOnlyEndpoint:
     def __init__(self, app: Any, *, token: str, port: int,
-                 dashboard: Callable[[], Awaitable[dict[str, Any]]] | None = None):
+                 dashboard: Callable[[], Awaitable[dict[str, Any]]] | None = None,
+                 transcript: Callable[[int, int], Awaitable[dict[str, Any]]] | None = None):
         self.app = app
         self.token = token
         self.port = port
         self.dashboard = dashboard
+        self.transcript = transcript
 
     async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
         if scope["type"] == "lifespan":
@@ -43,6 +53,15 @@ class BridgeOnlyEndpoint:
                 await self._deny(scope, receive, send, 405)
                 return
             await JSONResponse(await self.dashboard())(scope, receive, send)
+            return
+        if kind == "http" and path == "/hub/transcript" and self.transcript is not None:
+            if scope.get("method") != "GET":
+                await self._deny(scope, receive, send, 405)
+                return
+            query = parse_qs(scope.get("query_string", b"").decode("ascii", errors="ignore"))
+            after = _query_int(query, "after", 0)
+            limit = _query_int(query, "limit", 200)
+            await JSONResponse(await self.transcript(after, limit))(scope, receive, send)
             return
         if kind == "http" and path in {"/api/instances", "/api/command"}:
             expected_method = "GET" if path == "/api/instances" else "POST"

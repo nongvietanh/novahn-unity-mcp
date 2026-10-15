@@ -212,17 +212,17 @@
     min-width: 80px;
     height: 28px;
     margin-left: 8px;
-    background-color: rgba(50, 150, 250, 0.8);
+    background-color: rgba(124, 92, 252, 0.85);
     border-radius: 4px;
     -unity-font-style: bold;
 }
 
 .action-button:hover {
-    background-color: rgba(50, 150, 250, 1);
+    background-color: rgba(146, 120, 255, 1);
 }
 
 .action-button:active {
-    background-color: rgba(30, 120, 200, 1);
+    background-color: rgba(99, 74, 212, 1);
 }
 
 /* Start Server button in the manual config section should align flush left like other full-width controls */
@@ -264,30 +264,30 @@
     height: 34px;
     margin-top: 4px;
     margin-bottom: 4px;
-    background-color: rgba(0, 175, 110, 1);
+    background-color: rgba(124, 92, 252, 1);
     color: rgba(255, 255, 255, 1);
     border-radius: 6px;
     border-width: 1px;
-    border-color: rgba(0, 145, 90, 1);
+    border-color: rgba(91, 63, 208, 1);
     font-size: 13px;
     -unity-font-style: bold;
     letter-spacing: 0.3px;
 }
 
 .primary-button:hover {
-    background-color: rgba(0, 200, 130, 1);
-    border-color: rgba(0, 170, 105, 1);
+    background-color: rgba(146, 120, 255, 1);
+    border-color: rgba(124, 92, 252, 1);
 }
 
 .primary-button:active {
-    background-color: rgba(0, 150, 90, 1);
-    border-color: rgba(0, 125, 75, 1);
+    background-color: rgba(99, 74, 212, 1);
+    border-color: rgba(76, 52, 176, 1);
 }
 
 .primary-button:disabled {
-    background-color: rgba(70, 100, 85, 0.5);
+    background-color: rgba(85, 78, 120, 0.5);
     color: rgba(220, 220, 220, 0.6);
-    border-color: rgba(70, 100, 85, 0.5);
+    border-color: rgba(85, 78, 120, 0.5);
 }
 
 /* Foldout that hides the per-client (single-target) controls. */

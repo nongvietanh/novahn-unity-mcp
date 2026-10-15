@@ -2,8 +2,8 @@
     <ui:VisualElement name="root-container" class="root-layout">
         <ui:VisualElement name="header-bar" class="header-bar">
             <ui:VisualElement name="header-left" class="header-left">
-                <!-- OceanMark logo is injected here at index 0 in CreateGUI -->
-                <ui:Label text="MCP for Unity" name="title" class="header-title" />
+                <!-- NovahnMark logo is injected here at index 0 in CreateGUI -->
+                <ui:Label text="Novahn" name="title" class="header-title" />
             </ui:VisualElement>
             <ui:VisualElement name="header-right" class="header-right">
                 <ui:DropdownField name="language-dropdown" class="language-dropdown" />
