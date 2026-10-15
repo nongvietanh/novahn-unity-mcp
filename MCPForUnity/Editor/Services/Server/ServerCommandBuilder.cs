@@ -67,6 +67,37 @@ namespace MCPForUnity.Editor.Services.Server
         }
 
         /// <inheritdoc/>
+        public bool TryBuildHubCommand(out string fileName, out string arguments, out string displayCommand, out string error)
+        {
+            fileName = null;
+            arguments = null;
+            displayCommand = null;
+            error = null;
+
+            var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+            if (string.IsNullOrEmpty(uvxPath))
+            {
+                error = "uv is not installed or found in PATH. Install it or set an override in Advanced Settings.";
+                return false;
+            }
+
+            string devFlags = AssetPathUtility.GetUvxDevFlags();
+            string fromArgs = AssetPathUtility.GetBetaServerFromArgs(quoteFromPath: true);
+            const string hubScript = "novahn-unity-hub";
+
+            // The hub is a second console script in the same server package, so it must be
+            // invoked via --from <source>; the hub reads its config from the environment.
+            string args = string.IsNullOrEmpty(fromArgs)
+                ? $"{devFlags}--from {packageName} {hubScript}"
+                : $"{devFlags}{fromArgs} {hubScript}";
+
+            fileName = uvxPath;
+            arguments = args;
+            displayCommand = $"{QuoteIfNeeded(uvxPath)} {args}";
+            return true;
+        }
+
+        /// <inheritdoc/>
         public string BuildUvPathFromUvx(string uvxPath)
         {
             if (string.IsNullOrWhiteSpace(uvxPath))

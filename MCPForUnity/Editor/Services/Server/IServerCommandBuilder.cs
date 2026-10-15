@@ -17,6 +17,13 @@ namespace MCPForUnity.Editor.Services.Server
         bool TryBuildCommand(out string fileName, out string arguments, out string displayCommand, out string error);
 
         /// <summary>
+        /// Attempts to build the command parts for launching the Multi-Agent Hub
+        /// (the <c>novahn-unity-hub</c> console script). The hub reads its agent set and
+        /// tokens from the environment, so no transport/URL arguments are added.
+        /// </summary>
+        bool TryBuildHubCommand(out string fileName, out string arguments, out string displayCommand, out string error);
+
+        /// <summary>
         /// Builds the uv path from the uvx path by replacing uvx with uv.
         /// </summary>
         /// <param name="uvxPath">Path to uvx executable</param>

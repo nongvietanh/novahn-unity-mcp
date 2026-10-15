@@ -20,6 +20,19 @@ namespace MCPForUnity.Editor.Services
         bool StartLocalHttpServer(bool quiet = false);
 
         /// <summary>
+        /// Launch the Multi-Agent Hub (novahn-unity-hub) headless, injecting the given
+        /// environment variables (agent list + per-agent tokens). Replaces any hub this
+        /// session already started.
+        /// </summary>
+        bool StartHub(System.Collections.Generic.IReadOnlyDictionary<string, string> environment, out string error);
+
+        /// <summary>Stop the hub this session launched, if any.</summary>
+        bool StopHub();
+
+        /// <summary>True while the hub this session launched is still running.</summary>
+        bool IsHubRunning();
+
+        /// <summary>
         /// Gets the launch-log path for the configured local HTTP server port, or null if unavailable.
         /// </summary>
         string GetLocalHttpServerLaunchLogPath();
