@@ -1,0 +1,33 @@
+{
+  "name": "com.novahn.unity-mcp",
+  "version": "10.3.1-beta.5",
+  "displayName": "Novahn MCP for Unity",
+  "description": "A simple bridge that connects AI assistants to Unity via the MCP (Model Context Protocol). Supports multiple MCP clients and includes Vietnamese setup guidance.",
+  "unity": "2020.3",
+  "documentationUrl": "https://gitlab.com/novahn/unity-mcp",
+  "licensesUrl": "https://gitlab.com/novahn/unity-mcp/-/blob/main/LICENSE",
+  "dependencies": {
+    "com.unity.modules.animation": "1.0.0",
+    "com.unity.modules.imageconversion": "1.0.0",
+    "com.unity.modules.physics": "1.0.0",
+    "com.unity.modules.physics2d": "1.0.0",
+    "com.unity.modules.uielements": "1.0.0",
+    "com.unity.modules.screencapture": "1.0.0",
+    "com.unity.modules.unitywebrequest": "1.0.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2",
+    "com.unity.test-framework": "1.1.30"
+  },
+  "keywords": [
+    "unity",
+    "ai",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "mcp-client"
+  ],
+  "author": {
+    "name": "Novahn",
+    "url": "https://gitlab.com/novahn/unity-mcp"
+  }
+}
