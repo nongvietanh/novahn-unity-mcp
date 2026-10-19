@@ -22,6 +22,12 @@ Scene, Assets, Scripts
 - `Server/` - Python MCP server using FastMCP
 - `MCPForUnity/` - Unity C# Editor package
 
+### Novahn Studio coordination
+
+The Studio UI, desktop coordinator tool and role skills live in `MCPForUnity/Editor/`. Its bundled coordination runtime is `MCPForUnity/Editor/StudioServer~/`, launched separately from the shared Unity MCP server in `Server/`. It reuses that server's Unity bridge. Keep the bundled runtime with the UPM package; do not replace the shared server with it.
+
+The primary AI is chosen from supported clients (Claude Desktop, Claude Code, Codex, etc.); never assume Codex. Team dropdowns generate display names automatically. `novahn_workspace.connect` requires the actual caller's client ID and respects the selected primary. Stdio-only clients use the bundled `hub.stdio_proxy` to reach HTTP endpoints. See `MCPForUnity/STUDIO_GUIDE.md`.
+
 ### Three Layers on the Python Side
 
 The Python server has three distinct layers. These are **not** auto-generated from each other:

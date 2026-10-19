@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Services.Hub;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -38,10 +39,10 @@ namespace MCPForUnity.Editor.Windows
         private PopupField<string> filterField;
         private Button pauseButton;
 
-        [MenuItem(ProductInfo.MenuRoot + "/AI Console %#j", priority = 5)]
+        [MenuItem(ProductInfo.MenuRoot + "/AI Log %#j", priority = 5)]
         public static void ShowWindow()
         {
-            AgentConsoleWindow window = GetWindow<AgentConsoleWindow>("AI Console");
+            AgentConsoleWindow window = GetWindow<AgentConsoleWindow>(StudioText.T("Novahn • AI Log"));
             window.minSize = new Vector2(520, 360);
             window.Show();
             window.Focus();
@@ -67,6 +68,8 @@ namespace MCPForUnity.Editor.Windows
         {
             VisualElement root = rootVisualElement;
             root.Clear();
+            MCPForUnity.Editor.Windows.Studio.StudioUi.ApplyFont(root);
+            root.style.backgroundColor = new Color(0.078f, 0.098f, 0.137f);
             root.style.paddingLeft = 10;
             root.style.paddingRight = 10;
             root.style.paddingTop = 8;
@@ -75,10 +78,10 @@ namespace MCPForUnity.Editor.Windows
             VisualElement header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
             header.style.alignItems = Align.Center;
-            Label title = new Label("AI Console");
+            Label title = new Label(StudioText.T("NOVAHN / AI LOG"));
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.fontSize = 15;
-            title.style.color = new Color(0.486f, 0.361f, 0.988f); // Novahn indigo #7C5CFC
+            title.style.color = new Color(0.663f, 0.902f, 0.796f);
             title.style.flexGrow = 1;
             header.Add(title);
 
@@ -141,9 +144,9 @@ namespace MCPForUnity.Editor.Windows
 
             if (renderedLanguage != McpUiLocalization.CurrentLanguage)
             {
-                McpUiLocalization.Apply(rootVisualElement);
+                titleContent.text = StudioText.T("Novahn • AI Log");
+                CreateGUI();
                 pauseButton.text = paused ? T("Resume") : T("Pause");
-                renderedLanguage = McpUiLocalization.CurrentLanguage;
             }
 
             if (pendingRequest != null)
@@ -171,7 +174,7 @@ namespace MCPForUnity.Editor.Windows
             if (paused || EditorApplication.timeSinceStartup < nextPollTime)
                 return;
 
-            string url = HttpEndpointUtility.GetLocalBaseUrl() +
+            string url = StudioWorkspace.DashboardUrl +
                          "/hub/transcript?after=" + lastCursor + "&limit=" + FetchLimit;
             pendingRequest = UnityWebRequest.Get(url);
             pendingRequest.timeout = 3;

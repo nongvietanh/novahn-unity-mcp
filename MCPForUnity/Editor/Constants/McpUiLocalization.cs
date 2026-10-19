@@ -162,13 +162,17 @@ namespace MCPForUnity.Editor.Constants
             ["OK"] = "Đóng",
         };
 
-        public static string CurrentLanguage => EditorPrefs.GetString(LanguageKey, "vi");
+        public static string CurrentLanguage => EditorPrefs.GetString(LanguageKey, "en") == "vi" ? "vi" : "en";
+        public static event System.Action LanguageChanged;
 
         public static string CurrentDisplayName => CurrentLanguage == "vi" ? "Tiếng Việt" : "English";
 
         public static void SetLanguage(string language)
         {
-            EditorPrefs.SetString(LanguageKey, language == "en" ? "en" : "vi");
+            string next = language == "vi" ? "vi" : "en";
+            if (next == CurrentLanguage) return;
+            EditorPrefs.SetString(LanguageKey, next);
+            LanguageChanged?.Invoke();
         }
 
         public static string Translate(string value)

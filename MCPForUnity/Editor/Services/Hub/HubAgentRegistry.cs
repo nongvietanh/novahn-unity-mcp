@@ -17,6 +17,10 @@ namespace MCPForUnity.Editor.Services.Hub
         public int port;
         public string token;
         public bool isLeader;
+        public string responsibility;
+        public string skillInstallPath;
+        public string configuredPath;
+        public string configuredAt;
     }
 
     /// <summary>
@@ -78,7 +82,7 @@ namespace MCPForUnity.Editor.Services.Hub
 
         public int NextFreePort()
         {
-            var used = new HashSet<int>(agents.Select(agent => agent.port)) { BridgePort };
+            var used = new HashSet<int>(agents.Select(agent => agent.port)) { BridgePort, 4320 };
             int port = BasePort;
             while (used.Contains(port)) port++;
             return port;
@@ -107,8 +111,14 @@ namespace MCPForUnity.Editor.Services.Hub
         public bool IsValid(out string error)
         {
             if (agents.Count == 0) { error = "Add at least one agent."; return false; }
+            if (agents.Any(a => a.port < 1024 || a.port > 65535))
+            { error = "Cổng AI phải nằm trong khoảng 1024–65535."; return false; }
+            if (agents.Any(a => string.IsNullOrEmpty(a.token) || a.token.Length < 32))
+            { error = "Token của AI không hợp lệ. Xóa và thêm lại AI đó."; return false; }
             if (agents.Select(a => a.id).Distinct().Count() != agents.Count)
             { error = "Agent ids must be unique."; return false; }
+            if (agents.Select(a => a.id.Replace('-', '_')).Distinct().Count() != agents.Count)
+            { error = "ID của AI không được chỉ khác nhau dấu gạch ngang/gạch dưới."; return false; }
             var ports = agents.Select(a => a.port).ToList();
             ports.Add(BridgePort);
             if (ports.Distinct().Count() != ports.Count)
@@ -126,7 +136,8 @@ namespace MCPForUnity.Editor.Services.Hub
             string slug = IdPattern.Replace(seed.Trim().ToLowerInvariant(), "-").Trim('-');
             if (string.IsNullOrEmpty(slug)) slug = "agent";
             if (slug.Length > 32) slug = slug.Substring(0, 32).Trim('-');
-            var existing = new HashSet<string>(agents.Select(a => a.id));
+            slug = slug.Replace('_', '-');
+            var existing = new HashSet<string>(agents.Select(a => a.id.Replace('_', '-')));
             if (!existing.Contains(slug)) return slug;
             for (int n = 2; ; n++)
             {

@@ -1,1134 +1,272 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services;
+using MCPForUnity.Editor.Services.Hub;
 using MCPForUnity.Editor.Windows.Components.Advanced;
 using MCPForUnity.Editor.Windows.Components.AssetGen;
-using MCPForUnity.Editor.Windows.Components.Branding;
 using MCPForUnity.Editor.Windows.Components.ClientConfig;
 using MCPForUnity.Editor.Windows.Components.Connection;
 using MCPForUnity.Editor.Windows.Components.Resources;
 using MCPForUnity.Editor.Windows.Components.Tools;
-using MCPForUnity.Editor.Setup;
 using MCPForUnity.Editor.Windows.Components.Validation;
+using MCPForUnity.Editor.Windows.Studio;
 using UnityEditor;
-using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace MCPForUnity.Editor.Windows
 {
-    public class MCPForUnityEditorWindow : EditorWindow
+    public enum StudioPage { Overview, Team, Tasks, Skills, Connection, Tools, Resources, AssetGen, Settings }
+
+    public partial class MCPForUnityEditorWindow : EditorWindow
     {
-        // Section controllers
+        private static readonly HashSet<MCPForUnityEditorWindow> OpenWindows = new HashSet<MCPForUnityEditorWindow>();
+        private readonly Dictionary<StudioPage, VisualElement> pages = new Dictionary<StudioPage, VisualElement>();
+        private readonly Dictionary<StudioPage, Button> navigation = new Dictionary<StudioPage, Button>();
+        private readonly Dictionary<StudioPage, Action> refreshers = new Dictionary<StudioPage, Action>();
+        [SerializeField] private StudioPage currentPage;
+        private VisualElement content;
+        private Label pageTitle, pageSubtitle, connectionBadge;
         private McpConnectionSection connectionSection;
         private McpClientConfigSection clientConfigSection;
-        private McpHubAgentsSection hubAgentsSection;
         private McpAdvancedSection advancedSection;
-        private McpToolsSection toolsSection;
-        private McpResourcesSection resourcesSection;
-        private McpAssetGenSection assetGenSection;
+        private bool created;
+        private double lastUpdate;
+        private StudioTasksView taskView;
 
-        // UI Elements
-        private Label versionLabel;
-        private DropdownField languageDropdown;
-        private VisualElement updateNotification;
-        private Label updateNotificationText;
-
-        private ToolbarToggle clientsTabToggle;
-        private ToolbarToggle depsTabToggle;
-        private ToolbarToggle advancedTabToggle;
-        private ToolbarToggle toolsTabToggle;
-        private ToolbarToggle resourcesTabToggle;
-        private ToolbarToggle assetGenTabToggle;
-        private VisualElement clientsPanel;
-        private VisualElement depsPanel;
-        private VisualElement advancedPanel;
-        private VisualElement toolsPanel;
-        private VisualElement resourcesPanel;
-        private VisualElement assetGenPanel;
-
-        private static readonly HashSet<MCPForUnityEditorWindow> OpenWindows = new HashSet<MCPForUnityEditorWindow>();
-        private bool guiCreated = false;
-        private bool toolsLoaded = false;
-        private bool resourcesLoaded = false;
-        private double lastRefreshTime = 0;
-        private const double RefreshDebounceSeconds = 0.5;
-        private bool updateCheckQueued = false;
-        private bool updateCheckInFlight = false;
-
-        private enum ActivePanel
+        public static void ShowWindow() => ShowPage(StudioPage.Overview);
+        public static void ShowPage(StudioPage page)
         {
-            Clients,
-            Deps,
-            Advanced,
-            Tools,
-            Resources,
-            AssetGen
-        }
-
-        internal static void CloseAllWindows()
-        {
-            var windows = OpenWindows.Where(window => window != null).ToArray();
-            foreach (var window in windows)
-            {
-                window.Close();
-            }
-        }
-
-        public static void ShowWindow()
-        {
-            var existingWindows = UnityEngine.Resources.FindObjectsOfTypeAll<MCPForUnityEditorWindow>();
-            MCPForUnityEditorWindow window = null;
-
-            if (existingWindows.Length > 0)
-            {
-                window = existingWindows[0];
-
-                // If multiple instances exist, keep one and close the extras to avoid stale hidden tabs.
-                for (int i = 1; i < existingWindows.Length; i++)
-                {
-                    try
-                    {
-                        existingWindows[i].Close();
-                    }
-                    catch (Exception ex)
-                    {
-                        McpLog.Warn($"Error closing duplicate MCP window: {ex.Message}");
-                    }
-                }
-            }
-            else
-            {
-                window = GetWindow<MCPForUnityEditorWindow>(ProductInfo.ProductName);
-            }
-
-            window.titleContent = new GUIContent(McpUiLocalization.Translate(ProductInfo.ProductName));
-            window.minSize = new Vector2(500, 340);
-
-            if (window.position.width < 100 || window.position.height < 100)
-            {
-                window.position = new Rect(120, 120, 900, 700);
-            }
-
+            var window = GetWindow<MCPForUnityEditorWindow>();
+            window.titleContent = new GUIContent(ProductInfo.ProductName);
+            window.minSize = new Vector2(900, 600);
             window.Show();
-            window.ShowTab();
+            if (window.created) window.Navigate(page);
+            else window.currentPage = page;
             window.Focus();
         }
-
-        // Helper to check and manage open windows from other classes
-        public static bool HasAnyOpenWindow()
-        {
-            return OpenWindows.Count > 0;
-        }
-
-        public static void CloseAllOpenWindows()
-        {
-            if (OpenWindows.Count == 0)
-                return;
-
-            // Copy to array to avoid modifying the collection while iterating
-            var arr = new MCPForUnityEditorWindow[OpenWindows.Count];
-            OpenWindows.CopyTo(arr);
-            foreach (var window in arr)
-            {
-                try
-                {
-                    window?.Close();
-                }
-                catch (Exception ex)
-                {
-                    McpLog.Warn($"Error closing MCP window: {ex.Message}");
-                }
-            }
-        }
+        public static bool HasAnyOpenWindow() => OpenWindows.Any(w => w != null);
+        public static void CloseAllOpenWindows() => CloseAllWindows();
+        internal static void CloseAllWindows()
+        { foreach (var window in OpenWindows.Where(w => w != null).ToArray()) window.Close(); }
 
         public void CreateGUI()
         {
-            // Guard against repeated CreateGUI calls (e.g., domain reloads)
-            if (guiCreated)
-                return;
-
-            string basePath = AssetPathUtility.GetMcpPackageRootPath();
-
-            // Load main window UXML
-            var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-                $"{basePath}/Editor/Windows/MCPForUnityEditorWindow.uxml"
-            );
-
-            if (visualTree == null)
-            {
-                McpLog.Error(
-                    $"Failed to load UXML at: {basePath}/Editor/Windows/MCPForUnityEditorWindow.uxml"
-                );
-                return;
-            }
-
+            pages.Clear(); navigation.Clear(); refreshers.Clear();
+            // Keep Unity's editor theme: it supplies the default font and control metrics.
             rootVisualElement.Clear();
-            visualTree.CloneTree(rootVisualElement);
-
-            // Load main window USS
-            var mainStyleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                $"{basePath}/Editor/Windows/MCPForUnityEditorWindow.uss"
-            );
-            if (mainStyleSheet != null)
-            {
-                rootVisualElement.styleSheets.Add(mainStyleSheet);
-            }
-
-            // Load common USS
-            var commonStyleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                $"{basePath}/Editor/Windows/Components/Common.uss"
-            );
-            if (commonStyleSheet != null)
-            {
-                rootVisualElement.styleSheets.Add(commonStyleSheet);
-            }
-
-            // Embed the Novahn brand mark at the left of the header bar
-            var headerLeft = rootVisualElement.Q<VisualElement>("header-left");
-            if (headerLeft != null && headerLeft.Q<NovahnMark>() == null)
-            {
-                var logo = new NovahnMark { name = "header-logo" };
-                logo.AddToClassList("header-logo");
-                headerLeft.Insert(0, logo);
-            }
-
-            // Cache UI elements
-            versionLabel = rootVisualElement.Q<Label>("version-label");
-            languageDropdown = rootVisualElement.Q<DropdownField>("language-dropdown");
-            updateNotification = rootVisualElement.Q<VisualElement>("update-notification");
-            updateNotificationText = rootVisualElement.Q<Label>("update-notification-text");
-
-            clientsPanel = rootVisualElement.Q<VisualElement>("clients-panel");
-            depsPanel = rootVisualElement.Q<VisualElement>("deps-panel");
-            advancedPanel = rootVisualElement.Q<VisualElement>("advanced-panel");
-            toolsPanel = rootVisualElement.Q<VisualElement>("tools-panel");
-            resourcesPanel = rootVisualElement.Q<VisualElement>("resources-panel");
-            assetGenPanel = rootVisualElement.Q<VisualElement>("assetgen-panel");
-            var clientsContainer = rootVisualElement.Q<VisualElement>("clients-container");
-            var depsContainer = rootVisualElement.Q<VisualElement>("deps-container");
-            var advancedContainer = rootVisualElement.Q<VisualElement>("advanced-container");
-            var toolsContainer = rootVisualElement.Q<VisualElement>("tools-container");
-            var resourcesContainer = rootVisualElement.Q<VisualElement>("resources-container");
-            var assetGenContainer = rootVisualElement.Q<VisualElement>("assetgen-container");
-
-            if (clientsPanel == null || depsPanel == null || advancedPanel == null || toolsPanel == null || resourcesPanel == null || assetGenPanel == null)
-            {
-                McpLog.Error("Failed to find tab panels in UXML");
-                return;
-            }
-
-            if (clientsContainer == null)
-            {
-                McpLog.Error("Failed to find clients-container in UXML");
-                return;
-            }
-
-            if (depsContainer == null)
-            {
-                McpLog.Error("Failed to find deps-container in UXML");
-                return;
-            }
-
-            if (advancedContainer == null)
-            {
-                McpLog.Error("Failed to find advanced-container in UXML");
-                return;
-            }
-
-            if (toolsContainer == null)
-            {
-                McpLog.Error("Failed to find tools-container in UXML");
-                return;
-            }
-
-            if (resourcesContainer == null)
-            {
-                McpLog.Error("Failed to find resources-container in UXML");
-                return;
-            }
-
-            if (assetGenContainer == null)
-            {
-                McpLog.Error("Failed to find assetgen-container in UXML");
-                return;
-            }
-
-            // Initialize version label
-            UpdateVersionLabel();
-            InitializeLanguageSelector();
-
-            SetupTabs();
-
-            // Load and initialize Connection section
-            var connectionTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-                $"{basePath}/Editor/Windows/Components/Connection/McpConnectionSection.uxml"
-            );
-            if (connectionTree != null)
-            {
-                var connectionRoot = connectionTree.Instantiate();
-                clientsContainer.Add(connectionRoot);
-                connectionSection = new McpConnectionSection(connectionRoot);
-                connectionSection.OnManualConfigUpdateRequested += () =>
-                    clientConfigSection?.UpdateManualConfiguration();
-                connectionSection.OnTransportChanged += () =>
-                    clientConfigSection?.RefreshSelectedClient(forceImmediate: true);
-            }
-
-            // Load and initialize Client Configuration section
-            var clientConfigTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-                $"{basePath}/Editor/Windows/Components/ClientConfig/McpClientConfigSection.uxml"
-            );
-            if (clientConfigTree != null)
-            {
-                var clientConfigRoot = clientConfigTree.Instantiate();
-                clientsContainer.Add(clientConfigRoot);
-                clientConfigSection = new McpClientConfigSection(clientConfigRoot);
-
-                // Wire up transport mismatch detection: when client status is checked,
-                // update the connection section's warning banner if there's a mismatch
-                clientConfigSection.OnClientTransportDetected += (clientName, transport) =>
-                    connectionSection?.UpdateTransportMismatchWarning(clientName, transport);
-
-                // Wire up version mismatch detection: when client status is checked,
-                // update the connection section's warning banner if there's a version mismatch
-                clientConfigSection.OnClientConfigMismatch += (clientName, mismatchMessage) =>
-                    connectionSection?.UpdateVersionMismatchWarning(clientName, mismatchMessage);
-            }
-
-            // Multi-Agent Hub: register several AI agents + a leader, start/stop the hub.
-            hubAgentsSection = new McpHubAgentsSection(clientsContainer);
-
-            // Build Dependencies section (replaces old Roslyn + Validation in Deps tab)
-            BuildDependenciesSection(depsContainer);
-
-            // Load and initialize Advanced section
-            var advancedTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-                $"{basePath}/Editor/Windows/Components/Advanced/McpAdvancedSection.uxml"
-            );
-            if (advancedTree != null)
-            {
-                var advancedRoot = advancedTree.Instantiate();
-                advancedContainer.Add(advancedRoot);
-                advancedSection = new McpAdvancedSection(advancedRoot);
-
-                // Wire up events from Advanced section
-                advancedSection.OnGitUrlChanged += () =>
-                    clientConfigSection?.UpdateManualConfiguration();
-                advancedSection.OnHttpServerCommandUpdateRequested += () =>
-                {
-                    connectionSection?.UpdateHttpServerCommandDisplay();
-                    connectionSection?.UpdateConnectionStatus();
-                };
-                advancedSection.OnTestConnectionRequested += async () =>
-                {
-                    if (connectionSection != null)
-                        await connectionSection.VerifyBridgeConnectionAsync();
-                };
-                advancedSection.OnPackageDeployed += () =>
-                {
-                    UpdateVersionLabel();
-                    QueueUpdateCheck();
-                };
-                // Wire up health status updates from Connection to Advanced
-                connectionSection?.SetHealthStatusUpdateCallback((isHealthy, statusText) =>
-                    advancedSection?.UpdateHealthStatus(isHealthy, statusText));
-            }
-
-            // Load Validation section into Advanced tab
-            var validationTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-                $"{basePath}/Editor/Windows/Components/Validation/McpValidationSection.uxml"
-            );
-            if (validationTree != null)
-            {
-                var validationRoot = validationTree.Instantiate();
-                advancedContainer.Add(validationRoot);
-                new McpValidationSection(validationRoot);
-            }
-
-            // Load and initialize Tools section
-            var toolsTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-                $"{basePath}/Editor/Windows/Components/Tools/McpToolsSection.uxml"
-            );
-            if (toolsTree != null)
-            {
-                var toolsRoot = toolsTree.Instantiate();
-                toolsContainer.Add(toolsRoot);
-                toolsSection = new McpToolsSection(toolsRoot);
-
-                if (toolsTabToggle != null && toolsTabToggle.value)
-                {
-                    EnsureToolsLoaded();
-                }
-            }
-            else
-            {
-                McpLog.Warn("Failed to load tools section UXML. Tool configuration will be unavailable.");
-            }
-
-            // Load and initialize Resources section
-            var resourcesTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-                $"{basePath}/Editor/Windows/Components/Resources/McpResourcesSection.uxml"
-            );
-            if (resourcesTree != null)
-            {
-                var resourcesRoot = resourcesTree.Instantiate();
-                resourcesContainer.Add(resourcesRoot);
-                resourcesSection = new McpResourcesSection(resourcesRoot);
-
-                if (resourcesTabToggle != null && resourcesTabToggle.value)
-                {
-                    EnsureResourcesLoaded();
-                }
-            }
-            else
-            {
-                McpLog.Warn("Failed to load resources section UXML. Resource configuration will be unavailable.");
-            }
-
-            // Load and initialize Asset Generation section
-            var assetGenTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-                $"{basePath}/Editor/Windows/Components/AssetGen/McpAssetGenSection.uxml"
-            );
-            if (assetGenTree != null)
-            {
-                var assetGenRoot = assetGenTree.Instantiate();
-                assetGenContainer.Add(assetGenRoot);
-                assetGenSection = new McpAssetGenSection(assetGenRoot);
-            }
-            else
-            {
-                McpLog.Warn("Failed to load asset generation section UXML. Asset generation configuration will be unavailable.");
-            }
-
-            // Apply .section-last class to last section in each stack
-            // (Unity UI Toolkit doesn't support :last-child pseudo-class)
-            ApplySectionLastClasses();
-            McpUiLocalization.Apply(rootVisualElement);
-
-            guiCreated = true;
-
-            // Initial updates
-            RefreshAllData();
-            McpUiLocalization.Apply(rootVisualElement);
-            QueueUpdateCheck();
+            StudioUi.ApplyFont(rootVisualElement);
+            string path = AssetPathUtility.GetMcpPackageRootPath() + "/Editor/Windows";
+            var tree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path + "/MCPForUnityEditorWindow.uxml");
+            if (tree == null) { rootVisualElement.Add(new HelpBox(StudioText.T("The Novahn Studio layout is missing."), HelpBoxMessageType.Error)); return; }
+            tree.CloneTree(rootVisualElement);
+            // At this point the tree contains authored shell text only, before user data is bound.
+            rootVisualElement.Query<Label>().ForEach(label => label.text = StudioText.T(label.text));
+            rootVisualElement.Q<Label>("preview-label").text = "NOVAHN STUDIO";
+            rootVisualElement.Q<Label>("preview-caption").text = StudioText.T("A workspace for your AI team.");
+            rootVisualElement.Q<Button>("console-button").text = StudioText.T("AI Log ↗");
+            var language = rootVisualElement.Q<DropdownField>("studio-language");
+            language.choices = new List<string> { "EN", "VI" };
+            language.SetValueWithoutNotify(McpUiLocalization.CurrentLanguage == "vi" ? "VI" : "EN");
+            language.RegisterValueChangedCallback(e => McpUiLocalization.SetLanguage(e.newValue == "VI" ? "vi" : "en"));
+            var common = AssetDatabase.LoadAssetAtPath<StyleSheet>(path + "/Components/Common.uss");
+            if (common != null && !rootVisualElement.styleSheets.Contains(common)) rootVisualElement.styleSheets.Add(common);
+            var styles = AssetDatabase.LoadAssetAtPath<StyleSheet>(path + "/MCPForUnityEditorWindow.uss");
+            if (styles != null && !rootVisualElement.styleSheets.Contains(styles)) rootVisualElement.styleSheets.Add(styles);
+            content = rootVisualElement.Q("studio-content");
+            pageTitle = rootVisualElement.Q<Label>("page-title");
+            pageSubtitle = rootVisualElement.Q<Label>("page-subtitle");
+            connectionBadge = rootVisualElement.Q<Label>("connection-badge");
+            rootVisualElement.Q<Label>("project-name").text = new System.IO.DirectoryInfo(StudioWorkspace.ProjectRoot).Name;
+            rootVisualElement.Q<Label>("version-label").text = "NOVAHN STUDIO  /  " + AssetPathUtility.GetPackageVersion();
+            rootVisualElement.Q<Button>("console-button").clicked += AgentConsoleWindow.ShowWindow;
+            var nav = rootVisualElement.Q("workspace-nav");
+            AddNavigation(nav, StudioPage.Overview, "01", StudioText.T("Overview"));
+            AddNavigation(nav, StudioPage.Team, "02", StudioText.T("AI Team"));
+            AddNavigation(nav, StudioPage.Tasks, "03", StudioText.T("Tasks"));
+            AddNavigation(nav, StudioPage.Skills, "04", StudioText.T("Skills"));
+            var engineNav = rootVisualElement.Q("engine-nav");
+            AddNavigation(engineNav, StudioPage.Connection, "05", StudioText.T("Connection"));
+            AddNavigation(engineNav, StudioPage.Tools, "06", StudioText.T("Tools"));
+            AddNavigation(engineNav, StudioPage.Resources, "07", StudioText.T("Resources"));
+            AddNavigation(engineNav, StudioPage.AssetGen, "08", StudioText.T("Asset generation"));
+            AddNavigation(engineNav, StudioPage.Settings, "09", StudioText.T("Settings"));
+            created = true;
+            Navigate(currentPage);
         }
 
-        private void InitializeLanguageSelector()
+        private void AddNavigation(VisualElement parent, StudioPage page, string number, string title)
         {
-            if (languageDropdown == null)
-                return;
-
-            languageDropdown.choices = new List<string> { "Tiếng Việt", "English" };
-            languageDropdown.SetValueWithoutNotify(McpUiLocalization.CurrentDisplayName);
-            languageDropdown.tooltip = "Language / Ngôn ngữ";
-            languageDropdown.RegisterValueChangedCallback(evt =>
-            {
-                McpUiLocalization.SetLanguage(evt.newValue == "English" ? "en" : "vi");
-                titleContent = new GUIContent(McpUiLocalization.Translate(ProductInfo.ProductName));
-                McpUiLocalization.Apply(rootVisualElement);
-            });
+            var button = new Button(() => Navigate(page)) { name = "nav-" + page.ToString().ToLowerInvariant() };
+            button.AddToClassList("studio-nav-button");
+            button.Add(new Label(number) { pickingMode = PickingMode.Ignore, name = "nav-number" });
+            button.Add(new Label(title) { pickingMode = PickingMode.Ignore });
+            navigation[page] = button; parent.Add(button);
         }
 
-        private void UpdateVersionLabel()
+        public void Navigate(StudioPage page)
         {
-            if (versionLabel == null)
+            if (!created) { currentPage = page; return; }
+            currentPage = page;
+            foreach (var item in navigation) item.Value.EnableInClassList("selected", item.Key == page);
+            var title = Titles(page); pageTitle.text = title.Item1; pageSubtitle.text = title.Item2;
+            content.Clear();
+            if (!pages.TryGetValue(page, out var panel))
             {
-                return;
+                var scroll = new ScrollView(ScrollViewMode.Vertical) { name = "page-" + page.ToString().ToLowerInvariant() };
+                scroll.AddToClassList("studio-scroll");
+                scroll.contentContainer.AddToClassList("studio-page");
+                BuildPage(page, scroll.contentContainer);
+                panel = scroll; pages[page] = panel;
             }
-
-            string version = AssetPathUtility.GetPackageVersion();
-            versionLabel.text = $"v{version}";
-            versionLabel.tooltip = AssetPathUtility.IsPreReleaseVersion()
-                ? $"{ProductInfo.ProductName} v{version} (pre-release package, using prerelease server channel)"
-                : $"{ProductInfo.ProductName} v{version}";
+            content.Add(panel);
+            RefreshState();
         }
 
-        private void QueueUpdateCheck()
+        private void BuildPage(StudioPage page, VisualElement body)
         {
-            if (updateCheckQueued || updateCheckInFlight)
+            switch (page)
             {
-                return;
+                case StudioPage.Overview:
+                    var dashboard = new StudioDashboardView(body, Navigate); refreshers[page] = dashboard.Refresh; break;
+                case StudioPage.Team:
+                    var team = new StudioTeamView(body); refreshers[page] = team.Refresh; break;
+                case StudioPage.Tasks:
+                    taskView = new StudioTasksView(body); refreshers[page] = taskView.Refresh; break;
+                case StudioPage.Skills:
+                    var skills = new StudioSkillsView(body); refreshers[page] = skills.Refresh; break;
+                case StudioPage.Connection: BuildConnection(body); break;
+                case StudioPage.Tools:
+                    var toolsRoot = LoadSection(body, "Tools/McpToolsSection");
+                    if (toolsRoot != null) { var tools = new McpToolsSection(toolsRoot); tools.Refresh(); }
+                    break;
+                case StudioPage.Resources:
+                    var resourcesRoot = LoadSection(body, "Resources/McpResourcesSection");
+                    if (resourcesRoot != null) { var resources = new McpResourcesSection(resourcesRoot); resources.Refresh(); }
+                    break;
+                case StudioPage.AssetGen:
+                    var genRoot = LoadSection(body, "AssetGen/McpAssetGenSection");
+                    if (genRoot != null) { var gen = new McpAssetGenSection(genRoot); gen.Refresh(); }
+                    break;
+                case StudioPage.Settings: BuildSettings(body); break;
             }
-
-            updateCheckQueued = true;
-            EditorApplication.delayCall += CheckForPackageUpdates;
         }
 
-        private void CheckForPackageUpdates()
+        private VisualElement LoadSection(VisualElement parent, string relative)
         {
-            updateCheckQueued = false;
-
-            if (updateNotification == null || updateNotificationText == null)
-            {
-                return;
-            }
-
-            string currentVersion = AssetPathUtility.GetPackageVersion();
-            if (string.IsNullOrEmpty(currentVersion) || currentVersion == "unknown")
-            {
-                updateNotification.RemoveFromClassList("visible");
-                return;
-            }
-
-            // Main thread: resolve service + read EditorPrefs cache (both require main thread)
-            var updateService = MCPServiceLocator.Updates;
-            var cachedResult = updateService.TryGetCachedResult(currentVersion);
-            if (cachedResult != null)
-            {
-                ApplyUpdateCheckResult(cachedResult, currentVersion);
-                return;
-            }
-
-            // Main thread: pre-compute installation info (uses main-thread-only Unity APIs)
-            bool isGitInstallation = updateService.IsGitInstallation();
-            string gitBranch = isGitInstallation ? updateService.GetGitUpdateBranch(currentVersion) : "main";
-
-            // Background thread: network I/O only (no EditorPrefs or Unity API access)
-            updateCheckInFlight = true;
-            Task.Run(() =>
-            {
-                try
-                {
-                    return updateService.FetchAndCompare(currentVersion, isGitInstallation, gitBranch);
-                }
-                catch (Exception ex)
-                {
-                    McpLog.Info($"Package update check skipped: {ex.Message}");
-                    return null;
-                }
-            }).ContinueWith(t =>
-            {
-                EditorApplication.delayCall += () =>
-                {
-                    updateCheckInFlight = false;
-
-                    // Main thread: cache the result in EditorPrefs
-                    var result = t.Status == TaskStatus.RanToCompletion ? t.Result : null;
-                    if (result != null && result.CheckSucceeded && !string.IsNullOrEmpty(result.LatestVersion))
-                    {
-                        updateService.CacheFetchResult(currentVersion, result.LatestVersion);
-                    }
-
-                    if (this == null || updateNotification == null || updateNotificationText == null)
-                    {
-                        return;
-                    }
-
-                    ApplyUpdateCheckResult(result, currentVersion);
-                };
-            }, TaskScheduler.Default);
+            string path = AssetPathUtility.GetMcpPackageRootPath() + "/Editor/Windows/Components/" + relative + ".uxml";
+            var asset = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
+            if (asset == null) { parent.Add(new HelpBox(StudioText.T("Cannot load ") + relative, HelpBoxMessageType.Error)); return null; }
+            var element = asset.Instantiate(); parent.Add(element);
+            return element;
         }
 
-        private void ApplyUpdateCheckResult(UpdateCheckResult result, string currentVersion)
+        private void BuildConnection(VisualElement body)
         {
-            if (result != null && result.CheckSucceeded && result.UpdateAvailable && !string.IsNullOrEmpty(result.LatestVersion))
+            body.Add(StudioUi.Note(StudioText.T("Unity MCP connects to the Editor. The AI Team Hub coordinates tasks between AI clients.")));
+            var connection = LoadSection(body, "Connection/McpConnectionSection");
+            var clients = LoadSection(body, "ClientConfig/McpClientConfigSection");
+            if (connection != null) connectionSection = new McpConnectionSection(connection);
+            if (clients != null) clientConfigSection = new McpClientConfigSection(clients);
+            if (connectionSection != null && clientConfigSection != null)
             {
-                updateNotificationText.text = $"Update available: v{result.LatestVersion}  (current: v{currentVersion})";
-                updateNotificationText.tooltip = $"Latest version: v{result.LatestVersion}\nCurrent version: v{currentVersion}";
-                updateNotification.AddToClassList("visible");
+                connectionSection.OnManualConfigUpdateRequested += () => clientConfigSection.UpdateManualConfiguration();
+                connectionSection.OnTransportChanged += () => clientConfigSection.RefreshSelectedClient(forceImmediate: true);
+                clientConfigSection.OnClientTransportDetected += connectionSection.UpdateTransportMismatchWarning;
+                clientConfigSection.OnClientConfigMismatch += connectionSection.UpdateVersionMismatchWarning;
+                connectionSection.SetHealthStatusUpdateCallback((healthy, status) => advancedSection?.UpdateHealthStatus(healthy, status));
             }
-            else
-            {
-                updateNotification.RemoveFromClassList("visible");
-            }
+            McpUiLocalization.Apply(body);
         }
 
-        private void EnsureToolsLoaded()
+        private void BuildSettings(VisualElement body)
         {
-            if (toolsLoaded)
+            body.Add(StudioUi.Note(StudioText.T("Configure your workspace runtime, diagnostics and optional Unity packages.")));
+            var advanced = LoadSection(body, "Advanced/McpAdvancedSection");
+            if (advanced != null)
             {
-                return;
+                advancedSection = new McpAdvancedSection(advanced);
+                advancedSection.OnGitUrlChanged += () => clientConfigSection?.UpdateManualConfiguration();
+                advancedSection.OnHttpServerCommandUpdateRequested += () => connectionSection?.UpdateHttpServerCommandDisplay();
+                advancedSection.OnTestConnectionRequested += async () => { if (connectionSection != null) await connectionSection.VerifyBridgeConnectionAsync(); };
+                foreach (string id in new[] { "deploy-source-path", "browse-deploy-source-button", "clear-deploy-source-button", "deploy-target-label",
+                    "deploy-backup-label", "deploy-button", "deploy-restore-button", "deploy-status-label" })
+                { var element = advanced.Q(id); if (element != null) element.style.display = DisplayStyle.None; }
+                foreach (var label in advanced.Query<Label>().ToList())
+                    if (label.text == "Package Source:") label.parent.style.display = DisplayStyle.None;
             }
-
-            if (toolsSection == null)
-            {
-                return;
-            }
-
-            toolsLoaded = true;
-            toolsSection.Refresh();
+            var optional = new Foldout { text = StudioText.T("Optional Unity packages"), value = false }; body.Add(optional);
+            BuildDependenciesSection(optional);
+            var validation = LoadSection(body, "Validation/McpValidationSection");
+            if (validation != null) new McpValidationSection(validation);
+            McpUiLocalization.Apply(body);
         }
 
-        private void EnsureResourcesLoaded()
+        private static Tuple<string, string> Titles(StudioPage page)
         {
-            if (resourcesLoaded)
+            switch (page)
             {
-                return;
-            }
-
-            if (resourcesSection == null)
-            {
-                return;
-            }
-
-            resourcesLoaded = true;
-            resourcesSection.Refresh();
-        }
-
-        /// <summary>
-        /// Applies the .section-last class to the last .section element in each .section-stack container.
-        /// This is a workaround for Unity UI Toolkit not supporting the :last-child pseudo-class.
-        /// </summary>
-        private void ApplySectionLastClasses()
-        {
-            var sectionStacks = rootVisualElement.Query<VisualElement>(className: "section-stack").ToList();
-            foreach (var stack in sectionStacks)
-            {
-                var sections = stack.Children().Where(c => c.ClassListContains("section")).ToList();
-                if (sections.Count > 0)
-                {
-                    // Remove class from all sections first (in case of refresh)
-                    foreach (var section in sections)
-                    {
-                        section.RemoveFromClassList("section-last");
-                    }
-                    // Add class to the last section
-                    sections[sections.Count - 1].AddToClassList("section-last");
-                }
+                case StudioPage.Team: return Tuple.Create(StudioText.T("AI Team"), StudioText.T("One primary AI coordinates. Worker AIs focus on their assigned tasks."));
+                case StudioPage.Tasks: return Tuple.Create(StudioText.T("Tasks"), StudioText.T("Give goals in desktop chat, delegate tasks and track results in this workspace."));
+                case StudioPage.Skills: return Tuple.Create(StudioText.T("Skills"), StudioText.T("Install Novahn skills and add custom skills for each AI."));
+                case StudioPage.Connection: return Tuple.Create(StudioText.T("Unity connection"), StudioText.T("Set up the MCP server and connect AI clients to the Editor."));
+                case StudioPage.Tools: return Tuple.Create(StudioText.T("Unity tools"), StudioText.T("Choose the operations AI can use in this project."));
+                case StudioPage.Resources: return Tuple.Create(StudioText.T("MCP resources"), StudioText.T("Choose the project data AI can read."));
+                case StudioPage.AssetGen: return Tuple.Create(StudioText.T("Asset generation"), StudioText.T("Configure image, model and audio generation services."));
+                case StudioPage.Settings: return Tuple.Create(StudioText.T("Settings"), StudioText.T("Runtime environment, diagnostics and optional Unity packages."));
+                default: return Tuple.Create(StudioText.T("Workspace"), StudioText.T("Connect your AI team to Unity, from goal to result."));
             }
         }
-
-        // Throttle OnEditorUpdate to avoid per-frame overhead (GitHub issue #577).
-        // Connection status polling every frame caused expensive network checks 60+ times/sec.
-        private double _lastEditorUpdateTime;
-        private const double EditorUpdateIntervalSeconds = 2.0;
 
         private void OnEnable()
         {
-            EditorApplication.update += OnEditorUpdate;
-            OpenWindows.Add(this);
+            titleContent = new GUIContent(ProductInfo.ProductName); minSize = new Vector2(900, 600);
+            OpenWindows.Add(this); StudioWorkspace.Changed += RefreshState; EditorApplication.update += UpdateEditor;
+            McpUiLocalization.LanguageChanged += RefreshLanguage;
         }
-
         private void OnDisable()
         {
-            EditorApplication.update -= OnEditorUpdate;
-            OpenWindows.Remove(this);
-            guiCreated = false;
-            toolsLoaded = false;
-            resourcesLoaded = false;
+            StudioWorkspace.Changed -= RefreshState; EditorApplication.update -= UpdateEditor;
+            McpUiLocalization.LanguageChanged -= RefreshLanguage;
+            OpenWindows.Remove(this); created = false; pages.Clear(); refreshers.Clear();
         }
-
-        private void OnFocus()
+        private void OnFocus() { if (created) RefreshState(); }
+        private void RefreshLanguage()
         {
-            // Only refresh data if UI is built
-            if (rootVisualElement == null || rootVisualElement.childCount == 0)
-                return;
-
-            RefreshAllData();
+            if (!created) return;
+            var selected = currentPage;
+            string editing = taskView?.EditingId;
+            var inputs = pages.Where(p => p.Key == StudioPage.Team || p.Key == StudioPage.Tasks || p.Key == StudioPage.Skills)
+                .ToDictionary(p => p.Key, p => StudioInputSnapshot.Capture(p.Value));
+            CreateGUI();
+            foreach (var pair in inputs)
+            {
+                Navigate(pair.Key);
+                pair.Value.Restore(pages[pair.Key]);
+                if (pair.Key == StudioPage.Tasks) { taskView.EditingId = editing; taskView.Refresh(); }
+            }
+            Navigate(selected);
         }
-
-        private void OnEditorUpdate()
+        private void RefreshState()
         {
-            // Throttle to 2-second intervals instead of every frame.
-            // This prevents the expensive IsLocalHttpServerReachable() socket checks from running
-            // 60+ times per second, which caused main thread blocking and GC pressure.
-            double now = EditorApplication.timeSinceStartup;
-            if (now - _lastEditorUpdateTime < EditorUpdateIntervalSeconds)
-            {
-                return;
-            }
-            _lastEditorUpdateTime = now;
-
-            if (rootVisualElement == null || rootVisualElement.childCount == 0)
-                return;
-
-            connectionSection?.UpdateConnectionStatus();
+            if (!created) return;
+            connectionBadge.text = StudioWorkspace.Online ? "●  HUB ONLINE" : "○  HUB OFFLINE";
+            connectionBadge.EnableInClassList("online", StudioWorkspace.Online);
+            if (refreshers.TryGetValue(currentPage, out var refresh)) refresh();
         }
-
-        private void RefreshAllData()
+        private void UpdateEditor()
         {
-            // Debounce rapid successive calls (e.g., from OnFocus being called multiple times)
-            double currentTime = EditorApplication.timeSinceStartup;
-            if (currentTime - lastRefreshTime < RefreshDebounceSeconds)
-            {
-                return;
-            }
-            lastRefreshTime = currentTime;
-
-            connectionSection?.UpdateConnectionStatus();
-
-            if (MCPServiceLocator.Bridge.IsRunning)
-            {
-                _ = connectionSection?.VerifyBridgeConnectionAsync();
-            }
-
-            advancedSection?.UpdatePathOverrides();
-            clientConfigSection?.RefreshSelectedClient();
+            if (!created || EditorApplication.timeSinceStartup - lastUpdate < 2) return;
+            lastUpdate = EditorApplication.timeSinceStartup;
+            if (currentPage == StudioPage.Connection) connectionSection?.UpdateConnectionStatus();
         }
-
-        private void SetupTabs()
-        {
-            clientsTabToggle = rootVisualElement.Q<ToolbarToggle>("clients-tab");
-            depsTabToggle = rootVisualElement.Q<ToolbarToggle>("deps-tab");
-            advancedTabToggle = rootVisualElement.Q<ToolbarToggle>("advanced-tab");
-            toolsTabToggle = rootVisualElement.Q<ToolbarToggle>("tools-tab");
-            resourcesTabToggle = rootVisualElement.Q<ToolbarToggle>("resources-tab");
-            assetGenTabToggle = rootVisualElement.Q<ToolbarToggle>("assetgen-tab");
-
-            clientsPanel?.RemoveFromClassList("hidden");
-            depsPanel?.RemoveFromClassList("hidden");
-            advancedPanel?.RemoveFromClassList("hidden");
-            toolsPanel?.RemoveFromClassList("hidden");
-            resourcesPanel?.RemoveFromClassList("hidden");
-            assetGenPanel?.RemoveFromClassList("hidden");
-
-            if (clientsTabToggle != null)
-            {
-                clientsTabToggle.RegisterValueChangedCallback(evt =>
-                {
-                    if (evt.newValue) SwitchPanel(ActivePanel.Clients);
-                });
-            }
-
-            if (depsTabToggle != null)
-            {
-                depsTabToggle.RegisterValueChangedCallback(evt =>
-                {
-                    if (evt.newValue) SwitchPanel(ActivePanel.Deps);
-                });
-            }
-
-            if (advancedTabToggle != null)
-            {
-                advancedTabToggle.RegisterValueChangedCallback(evt =>
-                {
-                    if (evt.newValue) SwitchPanel(ActivePanel.Advanced);
-                });
-            }
-
-            if (toolsTabToggle != null)
-            {
-                toolsTabToggle.RegisterValueChangedCallback(evt =>
-                {
-                    if (evt.newValue) SwitchPanel(ActivePanel.Tools);
-                });
-            }
-
-            if (resourcesTabToggle != null)
-            {
-                resourcesTabToggle.RegisterValueChangedCallback(evt =>
-                {
-                    if (evt.newValue) SwitchPanel(ActivePanel.Resources);
-                });
-            }
-
-            if (assetGenTabToggle != null)
-            {
-                assetGenTabToggle.RegisterValueChangedCallback(evt =>
-                {
-                    if (evt.newValue) SwitchPanel(ActivePanel.AssetGen);
-                });
-            }
-
-            var savedPanel = EditorPrefs.GetString(EditorPrefKeys.EditorWindowActivePanel, ActivePanel.Clients.ToString());
-            // Migrate old "Validation" saved value to "Deps"
-            if (savedPanel == "Validation") savedPanel = "Deps";
-            if (!Enum.TryParse(savedPanel, out ActivePanel initialPanel))
-            {
-                initialPanel = ActivePanel.Clients;
-            }
-
-            SwitchPanel(initialPanel);
-        }
-
-        private void SwitchPanel(ActivePanel panel)
-        {
-            // Hide all panels
-            if (clientsPanel != null)
-            {
-                clientsPanel.style.display = DisplayStyle.None;
-            }
-
-            if (depsPanel != null)
-            {
-                depsPanel.style.display = DisplayStyle.None;
-            }
-
-            if (advancedPanel != null)
-            {
-                advancedPanel.style.display = DisplayStyle.None;
-            }
-
-            if (toolsPanel != null)
-            {
-                toolsPanel.style.display = DisplayStyle.None;
-            }
-
-            if (resourcesPanel != null)
-            {
-                resourcesPanel.style.display = DisplayStyle.None;
-            }
-
-            if (assetGenPanel != null)
-            {
-                assetGenPanel.style.display = DisplayStyle.None;
-            }
-
-            // Show selected panel
-            switch (panel)
-            {
-                case ActivePanel.Clients:
-                    if (clientsPanel != null) clientsPanel.style.display = DisplayStyle.Flex;
-                    // Refresh client status when switching to Connect tab (e.g., after package/version changes).
-                    clientConfigSection?.RefreshSelectedClient(forceImmediate: true);
-                    break;
-                case ActivePanel.Deps:
-                    if (depsPanel != null) depsPanel.style.display = DisplayStyle.Flex;
-                    break;
-                case ActivePanel.Advanced:
-                    if (advancedPanel != null) advancedPanel.style.display = DisplayStyle.Flex;
-                    break;
-                case ActivePanel.Tools:
-                    if (toolsPanel != null) toolsPanel.style.display = DisplayStyle.Flex;
-                    EnsureToolsLoaded();
-                    break;
-                case ActivePanel.Resources:
-                    if (resourcesPanel != null) resourcesPanel.style.display = DisplayStyle.Flex;
-                    EnsureResourcesLoaded();
-                    break;
-                case ActivePanel.AssetGen:
-                    if (assetGenPanel != null) assetGenPanel.style.display = DisplayStyle.Flex;
-                    assetGenSection?.Refresh();
-                    break;
-            }
-
-            // Update toggle states
-            clientsTabToggle?.SetValueWithoutNotify(panel == ActivePanel.Clients);
-            depsTabToggle?.SetValueWithoutNotify(panel == ActivePanel.Deps);
-            advancedTabToggle?.SetValueWithoutNotify(panel == ActivePanel.Advanced);
-            toolsTabToggle?.SetValueWithoutNotify(panel == ActivePanel.Tools);
-            resourcesTabToggle?.SetValueWithoutNotify(panel == ActivePanel.Resources);
-            assetGenTabToggle?.SetValueWithoutNotify(panel == ActivePanel.AssetGen);
-
-            EditorPrefs.SetString(EditorPrefKeys.EditorWindowActivePanel, panel.ToString());
-            McpUiLocalization.Apply(rootVisualElement);
-        }
-
         internal static void RequestHealthVerification()
         {
-            foreach (var window in OpenWindows)
-            {
-                window?.ScheduleHealthCheck();
-            }
-        }
-
-        private void ScheduleHealthCheck()
-        {
-            EditorApplication.delayCall += async () =>
-            {
-                // Ensure window and components are still valid before execution
-                if (this == null || connectionSection == null)
-                {
-                    return;
-                }
-
-                try
-                {
-                    await connectionSection.VerifyBridgeConnectionAsync();
-                }
-                catch (Exception ex)
-                {
-                    // Log but don't crash if verification fails during cleanup
-                    McpLog.Warn($"Health check verification failed: {ex.Message}");
-                }
-            };
-        }
-
-        private static void BuildDependenciesSection(VisualElement container)
-        {
-            var section = new VisualElement();
-            section.AddToClassList("section");
-
-            var title = new Label("Optional Dependencies");
-            title.AddToClassList("section-title");
-            section.Add(title);
-
-            var content = new VisualElement();
-            content.AddToClassList("section-content");
-
-            var desc = new Label("Some tool groups require optional packages. Install them to unlock additional capabilities.");
-            desc.AddToClassList("validation-description");
-            desc.style.marginBottom = 4;
-            content.Add(desc);
-
-            // Install All / Uninstall All buttons
-            var bulkRow = new VisualElement();
-            bulkRow.style.flexDirection = FlexDirection.Row;
-            bulkRow.style.marginBottom = 8;
-
-            var upmPackages = new[] { "com.unity.probuilder", "com.unity.cinemachine", "com.unity.visualeffectgraph", "com.unity.cloud.gltfast" };
-
-            Button installAllButton = null;
-            installAllButton = new Button(() =>
-            {
-                if (!EditorUtility.DisplayDialog("Install All Dependencies",
-                    "This will install Roslyn DLLs, ProBuilder, Cinemachine, VFX Graph, and glTFast. Continue?",
-                    "Install All", "Cancel")) return;
-                installAllButton.SetEnabled(false);
-                installAllButton.text = "Installing...";
-                if (!RoslynInstaller.IsInstalled()) RoslynInstaller.Install(interactive: false);
-                BatchUpmAdd(upmPackages, () =>
-                {
-                    installAllButton.SetEnabled(true);
-                    installAllButton.text = "Install All";
-                });
-            });
-            installAllButton.text = "Install All";
-            installAllButton.AddToClassList("action-button");
-            installAllButton.style.marginRight = 4;
-            bulkRow.Add(installAllButton);
-
-            Button uninstallAllButton = null;
-            uninstallAllButton = new Button(() =>
-            {
-                if (!EditorUtility.DisplayDialog("Uninstall All Dependencies",
-                    "This will remove Roslyn DLLs, ProBuilder, Cinemachine, VFX Graph, and glTFast. Continue?",
-                    "Uninstall All", "Cancel")) return;
-                uninstallAllButton.SetEnabled(false);
-                uninstallAllButton.text = "Removing...";
-                UninstallRoslyn();
-                BatchUpmRemove(upmPackages, () =>
-                {
-                    uninstallAllButton.SetEnabled(true);
-                    uninstallAllButton.text = "Uninstall All";
-                });
-            });
-            uninstallAllButton.text = "Uninstall All";
-            uninstallAllButton.AddToClassList("action-button");
-            bulkRow.Add(uninstallAllButton);
-
-            content.Add(bulkRow);
-
-            // Roslyn — for execute_code modern C# support
-            // Check if Roslyn types are actually loaded (covers NuGet, Plugins folder, etc.)
-            bool roslynLoaded = Type.GetType("Microsoft.CodeAnalysis.CSharp.CSharpCompilation, Microsoft.CodeAnalysis.CSharp") != null;
-            bool roslynInstalledLocally = RoslynInstaller.IsInstalled();
-            AddDependencyRow(content,
-                "Roslyn (C# 12+ Compiler)",
-                "Enables modern C# syntax in execute_code tool (scripting_ext group).",
-                roslynLoaded,
-                roslynInstalledLocally
-                    ? "Installed via Plugins/Roslyn \u2014 execute_code uses Roslyn"
-                    : "Available (loaded from NuGet/external) \u2014 execute_code uses Roslyn",
-                "Not installed \u2014 execute_code falls back to C# 6 (CodeDom)",
-                done => { RoslynInstaller.Install(interactive: true); done?.Invoke(); },
-                roslynInstalledLocally
-                    ? (Action<Action>)(done => { UninstallRoslyn(); done?.Invoke(); })
-                    : null);
-
-            // ProBuilder
-            bool hasProBuilder = Type.GetType("UnityEngine.ProBuilder.ProBuilderMesh, Unity.ProBuilder") != null;
-            AddDependencyRow(content,
-                "ProBuilder",
-                "Required for the manage_probuilder tool (probuilder group).",
-                hasProBuilder,
-                "Installed",
-                "Not installed",
-                done => InstallUpmPackage("com.unity.probuilder", done),
-                done => RemoveUpmPackage("com.unity.probuilder", done));
-
-            // Cinemachine
-            bool hasCinemachine = Type.GetType("Unity.Cinemachine.CinemachineCamera, Unity.Cinemachine") != null
-                || Type.GetType("Cinemachine.CinemachineVirtualCamera, Cinemachine") != null;
-            AddDependencyRow(content,
-                "Cinemachine",
-                "Enhances manage_camera with virtual camera support (core group).",
-                hasCinemachine,
-                "Installed",
-                "Not installed \u2014 camera tool works without it",
-                done => InstallUpmPackage("com.unity.cinemachine", done),
-                done => RemoveUpmPackage("com.unity.cinemachine", done));
-
-            // VFX Graph — uses preprocessor symbol, so check via UPM package list
-            bool hasVfxGraph = IsUpmPackageInstalled("com.unity.visualeffectgraph");
-            AddDependencyRow(content,
-                "VFX Graph",
-                "Enables VisualEffect support in manage_vfx tool (vfx group).",
-                hasVfxGraph,
-                "Installed",
-                "Not installed \u2014 VFX tool falls back to ParticleSystem/LineRenderer",
-                done => InstallUpmPackage("com.unity.visualeffectgraph", done),
-                done => RemoveUpmPackage("com.unity.visualeffectgraph", done));
-
-            // glTFast — uses an assembly type, but also check via UPM package list
-            bool hasGltfast = IsUpmPackageInstalled("com.unity.cloud.gltfast") || Type.GetType("GLTFast.GltfImport, glTFast") != null;
-            AddDependencyRow(content,
-                "glTFast (glTF/GLB import)",
-                "Enables .glb/.gltf model import for the AI Asset Generation tools (asset_gen group).",
-                hasGltfast,
-                "Installed — GLB generation/import works",
-                "Not installed — GLB import is unavailable; FBX still works, or install to enable GLB",
-                done => InstallUpmPackage("com.unity.cloud.gltfast", done),
-                done => RemoveUpmPackage("com.unity.cloud.gltfast", done));
-
-            section.Add(content);
-            container.Add(section);
-        }
-
-        private static void AddDependencyRow(VisualElement parent, string name, string description,
-            bool isInstalled, string installedText, string missingText,
-            Action<Action> installAction, Action<Action> uninstallAction)
-        {
-            var row = new VisualElement();
-            row.style.marginBottom = 8;
-            row.style.paddingBottom = 8;
-            row.style.borderBottomWidth = 1;
-            row.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f, 0.3f);
-
-            var header = new VisualElement();
-            header.style.flexDirection = FlexDirection.Row;
-            header.style.alignItems = Align.Center;
-            header.style.marginBottom = 2;
-
-            var nameLabel = new Label(name);
-            nameLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            nameLabel.style.flexGrow = 1;
-            header.Add(nameLabel);
-
-            var statusIcon = new Label(isInstalled ? "\u2713" : "\u2717");
-            statusIcon.style.color = isInstalled ? new Color(0.4f, 0.8f, 0.4f) : new Color(0.8f, 0.4f, 0.4f);
-            statusIcon.style.fontSize = 14;
-            header.Add(statusIcon);
-
-            row.Add(header);
-
-            var descLabel = new Label(description);
-            descLabel.AddToClassList("validation-description");
-            descLabel.style.marginBottom = 2;
-            row.Add(descLabel);
-
-            var statusText = new Label(isInstalled ? installedText : missingText);
-            statusText.style.fontSize = 11;
-            statusText.style.color = isInstalled ? new Color(0.6f, 0.8f, 0.6f) : new Color(0.8f, 0.7f, 0.5f);
-            row.Add(statusText);
-
-            var buttonRow = new VisualElement();
-            buttonRow.style.flexDirection = FlexDirection.Row;
-            buttonRow.style.marginTop = 4;
-
-            if (!isInstalled && installAction != null)
-            {
-                Button btn = null;
-                btn = new Button(() =>
-                {
-                    btn.SetEnabled(false);
-                    btn.text = "Installing...";
-                    Action restore = () =>
-                    {
-                        btn.SetEnabled(true);
-                        btn.text = "Install";
-                    };
-                    try { installAction(restore); }
-                    catch (Exception e)
-                    {
-                        Debug.LogError($"[MCP] Install failed: {e.Message}");
-                        restore();
-                    }
-                });
-                btn.text = "Install";
-                btn.AddToClassList("action-button");
-                buttonRow.Add(btn);
-            }
-
-            if (isInstalled && uninstallAction != null)
-            {
-                Button btn = null;
-                btn = new Button(() =>
-                {
-                    if (!EditorUtility.DisplayDialog("Remove " + name,
-                        $"Are you sure you want to remove {name}?", "Remove", "Cancel")) return;
-                    btn.SetEnabled(false);
-                    btn.text = "Removing...";
-                    Action restore = () =>
-                    {
-                        btn.SetEnabled(true);
-                        btn.text = "Uninstall";
-                    };
-                    try { uninstallAction(restore); }
-                    catch (Exception e)
-                    {
-                        Debug.LogError($"[MCP] Uninstall failed: {e.Message}");
-                        restore();
-                    }
-                });
-                btn.text = "Uninstall";
-                btn.AddToClassList("action-button");
-                buttonRow.Add(btn);
-            }
-
-            if (buttonRow.childCount > 0)
-                row.Add(buttonRow);
-
-            parent.Add(row);
-        }
-
-        private static void InstallUpmPackage(string packageId, Action onComplete = null)
-        {
-            BatchUpmAdd(new[] { packageId }, onComplete);
-        }
-
-        private static void RemoveUpmPackage(string packageId, Action onComplete = null)
-        {
-            BatchUpmRemove(new[] { packageId }, onComplete);
-        }
-
-        private static void BatchUpmAdd(string[] packageIds, Action onComplete = null)
-        {
-            var request = UnityEditor.PackageManager.Client.AddAndRemove(packageIds, null);
-            EditorUtility.DisplayProgressBar("Installing Packages", $"Installing {packageIds.Length} package(s)...", 0.5f);
-            PollUpmRequest(request, "install", onComplete);
-        }
-
-        private static void BatchUpmRemove(string[] packageIds, Action onComplete = null)
-        {
-            var request = UnityEditor.PackageManager.Client.AddAndRemove(null, packageIds);
-            EditorUtility.DisplayProgressBar("Removing Packages", $"Removing {packageIds.Length} package(s)...", 0.5f);
-            PollUpmRequest(request, "remove", onComplete);
-        }
-
-        private static void PollUpmRequest(UnityEditor.PackageManager.Requests.AddAndRemoveRequest request, string verb, Action onComplete)
-        {
-            EditorApplication.CallbackFunction pollCallback = null;
-            pollCallback = () =>
-            {
-                if (!request.IsCompleted) return;
-                EditorApplication.update -= pollCallback;
-                EditorUtility.ClearProgressBar();
-                if (request.Status == UnityEditor.PackageManager.StatusCode.Success)
-                    Debug.Log($"[MCP] Package {verb} succeeded.");
-                else
-                    Debug.LogError($"[MCP] Package {verb} failed: {request.Error?.message}");
-                onComplete?.Invoke();
-            };
-            EditorApplication.update += pollCallback;
-        }
-
-        private static void UninstallRoslyn()
-        {
-            string folder = System.IO.Path.Combine(Application.dataPath, "Plugins/Roslyn");
-            if (System.IO.Directory.Exists(folder))
-            {
-                System.IO.Directory.Delete(folder, true);
-                string metaPath = folder + ".meta";
-                if (System.IO.File.Exists(metaPath))
-                    System.IO.File.Delete(metaPath);
-                AssetDatabase.Refresh();
-                Debug.Log("[MCP] Roslyn DLLs removed from Assets/Plugins/Roslyn/");
-            }
-        }
-
-        private static bool IsUpmPackageInstalled(string packageId)
-        {
-            // Check manifest.json directly — faster than async UPM API
-            string manifestPath = System.IO.Path.Combine(Application.dataPath, "../Packages/manifest.json");
-            if (!System.IO.File.Exists(manifestPath)) return false;
-            string manifest = System.IO.File.ReadAllText(manifestPath);
-            return manifest.Contains($"\"{packageId}\"");
+            foreach (var window in OpenWindows.ToArray())
+                if (window != null && window.connectionSection != null) _ = window.connectionSection.VerifyBridgeConnectionAsync();
         }
     }
 }

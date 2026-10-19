@@ -627,7 +627,7 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
 
             if (forceImmediate || ShouldRefreshClient(client))
             {
-                MCPServiceLocator.Client.CheckClientStatus(client);
+                MCPServiceLocator.Client.CheckClientStatus(client, attemptAutoRewrite: false);
                 lastStatusChecks[client] = DateTime.UtcNow;
             }
 

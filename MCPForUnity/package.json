@@ -1,11 +1,11 @@
 {
   "name": "com.novahn.unity-mcp",
   "version": "10.3.1-beta.5",
-  "displayName": "Novahn MCP for Unity",
-  "description": "A simple bridge that connects AI assistants to Unity via the MCP (Model Context Protocol). Supports multiple MCP clients and includes Vietnamese setup guidance.",
+  "displayName": "Novahn Studio",
+  "description": "Novahn's Unity workspace: selectable primary AI, multiple workers, desktop chat coordination, task scheduling, per-client skills and English/Vietnamese UI.",
   "unity": "2020.3",
-  "documentationUrl": "https://gitlab.com/novahn/unity-mcp",
-  "licensesUrl": "https://gitlab.com/novahn/unity-mcp/-/blob/main/LICENSE",
+  "documentationUrl": "https://github.com/nongvietanh/novahn-unity-mcp",
+  "licensesUrl": "https://github.com/nongvietanh/novahn-unity-mcp/blob/main/LICENSE",
   "dependencies": {
     "com.unity.modules.animation": "1.0.0",
     "com.unity.modules.imageconversion": "1.0.0",
@@ -28,6 +28,6 @@
   ],
   "author": {
     "name": "Novahn",
-    "url": "https://gitlab.com/novahn/unity-mcp"
+    "url": "https://github.com/nongvietanh/novahn-unity-mcp"
   }
 }

@@ -1,43 +1,41 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="True">
-    <ui:VisualElement name="root-container" class="root-layout">
-        <ui:VisualElement name="header-bar" class="header-bar">
-            <ui:VisualElement name="header-left" class="header-left">
-                <!-- NovahnMark logo is injected here at index 0 in CreateGUI -->
-                <ui:Label text="Novahn" name="title" class="header-title" />
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="True">
+    <ui:VisualElement name="novahn-studio" class="novahn-studio">
+        <ui:VisualElement class="studio-sidebar">
+            <ui:VisualElement class="studio-brand">
+                <ui:Label text="N/" class="studio-monogram" />
+                <ui:VisualElement>
+                    <ui:Label text="NOVAHN" class="studio-wordmark" />
+                    <ui:Label text="UNITY STUDIO" class="studio-brand-caption" />
+                </ui:VisualElement>
             </ui:VisualElement>
-            <ui:VisualElement name="header-right" class="header-right">
-                <ui:DropdownField name="language-dropdown" class="language-dropdown" />
-                <ui:Label text="v9.1.0" name="version-label" class="header-version" />
+            <ui:Label text="WORKSPACE" class="studio-nav-heading" />
+            <ui:VisualElement name="workspace-nav" />
+            <ui:Label text="UNITY ENGINE" class="studio-nav-heading" />
+            <ui:VisualElement name="engine-nav" />
+            <ui:VisualElement class="studio-sidebar-bottom">
+                <ui:Label name="preview-label" text="NOVAHN STUDIO" class="studio-preview-label" />
+                <ui:Label name="preview-caption" text="A workspace for your AI team." class="studio-muted studio-wrap" />
             </ui:VisualElement>
         </ui:VisualElement>
-        <ui:VisualElement name="update-notification" class="update-notification">
-            <ui:Label name="update-notification-text" class="update-notification-text" />
+        <ui:VisualElement class="studio-workspace">
+            <ui:VisualElement class="studio-topbar">
+                <ui:Label name="project-name" class="studio-project-name" />
+                <ui:Label text="/  AI WORKSPACE" class="studio-crumb" />
+                <ui:VisualElement class="studio-spacer" />
+                <ui:Label name="connection-badge" class="studio-connection-badge" />
+                <ui:DropdownField name="studio-language" tooltip="Language / Ngôn ngữ" />
+                <ui:Button name="console-button" text="AI Log ↗" class="studio-button" />
+            </ui:VisualElement>
+            <ui:VisualElement class="studio-page-header">
+                <ui:Label name="page-title" class="studio-page-title" />
+                <ui:Label name="page-subtitle" class="studio-page-subtitle studio-wrap" />
+            </ui:VisualElement>
+            <ui:VisualElement name="studio-content" class="studio-content" />
+            <ui:VisualElement class="studio-footer">
+                <ui:Label name="version-label" />
+                <ui:VisualElement class="studio-spacer" />
+                <ui:Label text="NOVAHN  /  BUILD TOGETHER" />
+            </ui:VisualElement>
         </ui:VisualElement>
-        <uie:Toolbar name="tab-toolbar" class="tab-toolbar">
-            <uie:ToolbarToggle name="clients-tab" text="Connect" value="true" />
-            <uie:ToolbarToggle name="tools-tab" text="Tools" />
-            <uie:ToolbarToggle name="resources-tab" text="Resources" />
-            <uie:ToolbarToggle name="assetgen-tab" text="Generative" />
-            <uie:ToolbarToggle name="deps-tab" text="Deps" />
-            <uie:ToolbarToggle name="advanced-tab" text="Advanced" />
-        </uie:Toolbar>
-        <ui:ScrollView name="clients-panel" class="panel-scroll" style="flex-grow: 1;">
-            <ui:VisualElement name="clients-container" class="section-stack" />
-        </ui:ScrollView>
-        <ui:ScrollView name="deps-panel" class="panel-scroll hidden" style="flex-grow: 1;">
-            <ui:VisualElement name="deps-container" class="section-stack" />
-        </ui:ScrollView>
-        <ui:ScrollView name="advanced-panel" class="panel-scroll hidden" style="flex-grow: 1;">
-            <ui:VisualElement name="advanced-container" class="section-stack" />
-        </ui:ScrollView>
-        <ui:ScrollView name="tools-panel" class="panel-scroll hidden" style="flex-grow: 1;">
-            <ui:VisualElement name="tools-container" class="section-stack" />
-        </ui:ScrollView>
-        <ui:ScrollView name="resources-panel" class="panel-scroll hidden" style="flex-grow: 1;">
-            <ui:VisualElement name="resources-container" class="section-stack" />
-        </ui:ScrollView>
-        <ui:ScrollView name="assetgen-panel" class="panel-scroll hidden" style="flex-grow: 1;">
-            <ui:VisualElement name="assetgen-container" class="section-stack" />
-        </ui:ScrollView>
     </ui:VisualElement>
 </ui:UXML>

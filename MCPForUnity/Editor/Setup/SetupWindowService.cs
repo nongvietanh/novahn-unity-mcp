@@ -81,7 +81,7 @@ namespace MCPForUnity.Editor.Setup
             try
             {
                 dependencyResult ??= DependencyManager.CheckAllDependencies();
-                MCPSetupWindow.ShowWindow(dependencyResult);
+                MCPForUnityEditorWindow.ShowPage(StudioPage.Connection);
             }
             catch (Exception ex)
             {
