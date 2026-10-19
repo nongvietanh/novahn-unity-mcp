@@ -26,6 +26,7 @@ namespace MCPForUnity.Editor.Windows
         // Section controllers
         private McpConnectionSection connectionSection;
         private McpClientConfigSection clientConfigSection;
+        private McpHubAgentsSection hubAgentsSection;
         private McpAdvancedSection advancedSection;
         private McpToolsSection toolsSection;
         private McpResourcesSection resourcesSection;
@@ -298,6 +299,9 @@ namespace MCPForUnity.Editor.Windows
                 clientConfigSection.OnClientConfigMismatch += (clientName, mismatchMessage) =>
                     connectionSection?.UpdateVersionMismatchWarning(clientName, mismatchMessage);
             }
+
+            // Multi-Agent Hub: register several AI agents + a leader, start/stop the hub.
+            hubAgentsSection = new McpHubAgentsSection(clientsContainer);
 
             // Build Dependencies section (replaces old Roslyn + Validation in Deps tab)
             BuildDependenciesSection(depsContainer);

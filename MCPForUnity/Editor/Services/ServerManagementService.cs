@@ -23,6 +23,7 @@ namespace MCPForUnity.Editor.Services
         private readonly ITerminalLauncher _terminalLauncher;
 
         private System.Diagnostics.Process _lastLaunchedProcess;
+        private System.Diagnostics.Process _lastLaunchedHubProcess;
 
         /// <summary>
         /// Creates a new ServerManagementService with default dependencies.
@@ -943,6 +944,69 @@ namespace MCPForUnity.Editor.Services
         private bool TryGetLocalHttpServerCommandParts(out string fileName, out string arguments, out string displayCommand, out string error)
         {
             return _commandBuilder.TryBuildCommand(out fileName, out arguments, out displayCommand, out error);
+        }
+
+        public bool StartHub(System.Collections.Generic.IReadOnlyDictionary<string, string> environment, out string error)
+        {
+            error = null;
+            if (!_commandBuilder.TryBuildHubCommand(out _, out _, out string displayCommand, out string buildError))
+            {
+                error = buildError;
+                return false;
+            }
+            try
+            {
+                StopHub(); // never run two hubs from one session
+                string log = Path.Combine(Path.GetTempPath(), "novahn-unity-hub-launch.log");
+                try { File.WriteAllText(log, string.Empty); } catch { }
+
+                var startInfo = CreateHeadlessProcessStartInfo(displayCommand, log);
+                string extraPathPrepend = GetPlatformSpecificPathPrepend();
+                if (!string.IsNullOrEmpty(extraPathPrepend))
+                {
+                    string currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+                    startInfo.EnvironmentVariables["PATH"] = string.IsNullOrEmpty(currentPath)
+                        ? extraPathPrepend
+                        : (extraPathPrepend + Path.PathSeparator + currentPath);
+                }
+                if (environment != null)
+                {
+                    foreach (var pair in environment)
+                        startInfo.EnvironmentVariables[pair.Key] = pair.Value;
+                }
+
+                McpLog.Info("Starting Novahn Multi-Agent Hub… (first run may take a minute while dependencies install)");
+                _lastLaunchedHubProcess = System.Diagnostics.Process.Start(startInfo);
+                return _lastLaunchedHubProcess != null;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                McpLog.Error($"Failed to start Multi-Agent Hub: {ex.Message}");
+                return false;
+            }
+        }
+
+        public bool StopHub()
+        {
+            try
+            {
+                if (_lastLaunchedHubProcess != null && !_lastLaunchedHubProcess.HasExited)
+                    _lastLaunchedHubProcess.Kill();
+                _lastLaunchedHubProcess = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                McpLog.Warn($"Failed to stop Multi-Agent Hub: {ex.Message}");
+                return false;
+            }
+        }
+
+        public bool IsHubRunning()
+        {
+            try { return _lastLaunchedHubProcess != null && !_lastLaunchedHubProcess.HasExited; }
+            catch { return false; }
         }
 
         /// <summary>
