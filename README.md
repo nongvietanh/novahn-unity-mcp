@@ -2,20 +2,71 @@
 
 Plugin kết nối Unity Editor với nhiều AI client qua Model Context Protocol (MCP). Dự án này được phát triển từ [MCP for Unity của CoplayDev](https://github.com/CoplayDev/unity-mcp); giấy phép MIT và ghi nhận tác giả gốc được giữ nguyên.
 
-Nếu dự án Unity đang dùng package `com.coplaydev.unity-mcp`, hãy gỡ package cũ trước khi cài `com.novahn.unity-mcp` để tránh nạp trùng mã nguồn.
+Package Unity có tên `com.novahn.unity-mcp`, hiển thị là **Novahn Studio**.
 
-## Bắt đầu nhanh
+## Import MCP vào Unity
 
-1. Trong Unity, mở **Window → Package Manager → + → Add package from git URL**.
-2. Dán URL:
+### Chuẩn bị
+
+- Cài [Git](https://git-scm.com/downloads), cho phép dùng qua `PATH`, rồi mở lại Unity nếu vừa cài Git.
+- Cài Python 3.10+ và [uv](https://docs.astral.sh/uv/getting-started/installation/) để chạy MCP server và Hub.
+- Nếu đang dùng `com.coplaydev.unity-mcp`, gỡ bản đó trong Package Manager trước để tránh trùng mã nguồn.
+
+### Cách 1: Cài từ GitHub qua Package Manager
+
+1. Mở project Unity → **Window → Package Manager**.
+2. Bấm **+** → **Install package from git URL…** hoặc **Add package from git URL…**, tùy phiên bản Unity.
+3. Dán **nguyên URL** dưới đây, rồi bấm **Install / Add**:
 
    ```text
    https://github.com/nongvietanh/novahn-unity-mcp.git?path=/MCPForUnity#main
    ```
 
-3. Mở **Novahn → Studio** hoặc **Ctrl + Shift + M**. Trong **Connection**, chọn **HTTP Local** và cấu hình kết nối Unity MCP cho ứng dụng AI.
-4. Trong **AI Team**, dùng dropdown **Primary AI** để chọn Claude Desktop, Claude Code, Codex hoặc client được hỗ trợ. Tên tự điền; không có client mặc định. Thêm AI phụ bằng dropdown **AI client**.
-5. Bấm **Setup MCP + Skills** cho từng AI, bật Hub và mở phiên client theo prompt tham gia. Sau đó giao yêu cầu ngay trong chat desktop của AI chính; Editor dùng để cấu hình và theo dõi.
+4. Chờ Unity tải package và biên dịch. Trong danh sách **In Project**, tìm **Novahn Studio**.
+5. Mở **Novahn → Studio** hoặc **Ctrl + Shift + M**.
+
+`?path=/MCPForUnity` trỏ tới package bên trong repo; `#main` chọn nhánh mã nguồn. Không dùng URL repo gốc thiếu phần `?path=...`, và không import cả repo vào `Assets`.
+
+### Cách 2: Thêm vào manifest của project
+
+Trong file **`<UnityProject>/Packages/manifest.json`**, thêm dòng sau vào object `dependencies`, giữ nguyên các dependency khác:
+
+```json
+"com.novahn.unity-mcp": "https://github.com/nongvietanh/novahn-unity-mcp.git?path=/MCPForUnity#main"
+```
+
+Thêm dấu phẩy giữa các dòng JSON nếu cần, lưu file rồi quay lại Unity để Package Manager tải package. Đây là manifest của **project**, không phải `package.json` trong repo này.
+
+### Cách 3: Dùng bản clone trên máy để phát triển
+
+Clone repo về máy. Trong Package Manager, chọn **+ → Install/Add package from disk…** rồi chọn **`<Repo>/MCPForUnity/package.json`**. Cách này cho phép sửa trực tiếp mã nguồn trong bản clone.
+
+### Nếu project đang dùng bản embedded
+
+Nếu có thư mục **`<UnityProject>/Packages/com.novahn.unity-mcp/`**, Unity ưu tiên bản đó thay cho dependency Git. Đổi URL trong manifest sẽ chưa chuyển sang bản GitHub.
+
+Để chuyển sang GitHub: đóng Unity, sao lưu rồi chuyển **thư mục embedded này ra ngoài thư mục `Packages` của project**, sau đó mở Unity và cài theo Cách 1 hoặc 2. Giữ bản sao lưu nếu có chỉnh sửa riêng. Không sửa trực tiếp `Library/PackageCache`.
+
+### Cập nhật sau khi có code mới trên GitHub
+
+Với bản cài Git, mở lại **Install/Add package from git URL…** và nhập lại URL ở Cách 1 để cập nhật revision. Package Manager có thể giữ commit cũ dù URL vẫn là `#main`; bản embedded/local cần được cập nhật theo nguồn tương ứng.
+
+Tham khảo Unity: [Cài bằng Git URL](https://docs.unity3d.com/6000.0/Documentation/Manual/upm-ui-giturl.html), [ưu tiên của embedded package](https://docs.unity.com/en-us/engine/6000.0/manual/packages-list/dependencies-lp/upm-embed).
+
+## Kết nối AI sau khi import
+
+1. Mở **Novahn → Studio**. Để dùng backend Novahn từ cùng repo, trong **Settings → Advanced Settings → Server Source** nhập:
+
+   ```text
+   git+https://github.com/nongvietanh/novahn-unity-mcp.git@main#subdirectory=Server
+   ```
+
+   Nếu server đã chạy trước khi đổi nguồn, dừng rồi khởi động lại. Đây là nguồn Python server, khác URL import package Unity ở trên.
+
+2. Trong **Connection**, chọn **HTTP Local**; bấm **Start Server** và **Start** để kết nối Editor nếu chưa chạy.
+3. Trong **AI Team**, dùng dropdown **Primary AI** chọn Claude Desktop, Claude Code, Codex hoặc client được hỗ trợ. Thêm AI phụ bằng dropdown **AI client**; tên tự sinh.
+4. Bấm **Setup MCP + Skills** cho các AI cần dùng, rồi **Start Hub**. Mở/reconnect ứng dụng AI để nhận cấu hình và dùng **Join prompt** với phiên endpoint riêng.
+5. Giao yêu cầu ngay trong chat desktop của AI chính. Không cần nhập lại trong Unity Editor. Xem task trong **Tasks** và trao đổi trong **AI Log**.
 
 Yêu cầu: Unity 2020.3 LTS đến Unity 6, Python 3.10 trở lên và `uv`. Unity 2020.3 chưa được kiểm tra compile trên Editor thật trong nhánh phát triển Hub này.
 
