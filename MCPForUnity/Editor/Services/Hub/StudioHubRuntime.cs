@@ -41,7 +41,7 @@ namespace MCPForUnity.Editor.Services.Hub
         {
             if (IsRunning) throw new InvalidOperationException(StudioText.T("The Hub is running. Stop it before changing the team."));
             var registry = StudioWorkspace.Team;
-            if (!registry.IsValid(out string invalid)) throw new InvalidOperationException(invalid);
+            if (!registry.IsValid(out string invalid)) throw new InvalidOperationException(StudioText.T(invalid));
             int dashboardPort = StudioWorkspace.Data.dashboardPort;
             if (dashboardPort < 1024 || dashboardPort > 65535 || registry.agents.Any(a => a.port == dashboardPort))
                 throw new InvalidOperationException(StudioText.T("The dashboard port must differ from agent ports and be between 1024 and 65535."));

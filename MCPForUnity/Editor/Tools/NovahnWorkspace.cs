@@ -10,14 +10,14 @@ namespace MCPForUnity.Editor.Tools
 {
     /// <summary>The trusted desktop coordinator uses the existing Unity MCP connection.</summary>
     [McpForUnityTool("novahn_workspace", AutoRegister = true, Group = "core",
-        Description = "Novahn Studio desktop chat workflow. Call connect to initialize the primary AI and start its project Hub without opening any Editor window. Use request to record a user goal, delegate to assign workers, inbox/claim/complete/get/cancel for primary tasks, events for progress, add_agent/setup_client/install_skills for onboarding. Workers use their own authenticated Hub endpoint, not this coordinator gateway. status is read-only. Never claim workers are running just because they are configured.")]
+        Description = "Novahn Studio desktop chat workflow. Call connect with your own client ID: the AI that connects becomes the primary and starts the project Hub without opening any Editor window. Use request to record a user goal, delegate to assign workers, inbox/claim/complete/get/cancel for primary tasks, events for progress, add_agent/setup_client/install_skills for onboarding. Workers use their own authenticated Hub endpoint, not this coordinator gateway. status is read-only. Never claim workers are running just because they are configured.")]
     public static class NovahnWorkspace
     {
         public class Parameters
         {
             [ToolParameter("status, connect, request, delegate, inbox, claim, complete, get, cancel, events, messages, message, ack, add_agent, setup_client, install_skills", Required = false, DefaultValue = "status")]
             public string action { get; set; }
-            [ToolParameter("Action arguments. connect: client (required; use the actual calling app's ID from status.availableClients). request/delegate: title, request, idempotency_key, assignee (delegate), parent_id and scheduled_at (optional ISO8601 with timezone). claim/get/complete/cancel: task_id, result (complete). add_agent: client, optional name and responsibility; display names are automatic. setup_client/install_skills: agent_id. events: after cursor. message: recipient, body, idempotency_key, optional task_id. ack: message_id.", Required = false)]
+            [ToolParameter("Action arguments. connect: client (required; your own app's ID from status.availableClients). request/delegate: title, request, idempotency_key, assignee (delegate), parent_id and scheduled_at (optional ISO8601 with timezone). claim/get/complete/cancel: task_id, result (complete). add_agent: client (command-line AIs only, e.g. claudecode, codex, geminicli), optional name and responsibility; display names are automatic. setup_client/install_skills: agent_id. events: after cursor. message: recipient, body, idempotency_key, optional task_id. ack: message_id.", Required = false)]
             public object arguments { get; set; }
         }
 
@@ -100,18 +100,13 @@ namespace MCPForUnity.Editor.Tools
             {
                 string clientKey = (string)a["client"];
                 if (string.IsNullOrWhiteSpace(clientKey)) return new ErrorResponse("client_selection_required", new {
-                    hint = "Pass the actual calling AI client ID, or choose Primary AI from the Studio dropdown. No client is selected by default.",
+                    hint = "Pass the ID of the AI app you are running in. The AI that connects becomes the primary.",
                     availableClients = StudioClientSetup.AvailableClients().Select(c => new { id = c.Id, name = c.DisplayName })
                 });
-                var client = StudioClientSetup.RequireClient(clientKey);
-                var leader = StudioWorkspace.Team.Leader;
-                if (leader != null && leader.clientKey != client.Id) return new ErrorResponse("primary_client_mismatch", new {
-                    selectedClient = leader.clientKey, callingClient = client.Id,
-                    hint = "Use the selected primary AI's client, its assigned worker endpoint, or explicitly change Primary AI in the Studio dropdown."
-                });
-                if (leader == null)
+                var previous = StudioWorkspace.Team.Leader?.clientKey;
+                var leader = StudioClientSetup.ClaimPrimary(clientKey);
+                if (previous != leader.clientKey)
                 {
-                    leader = StudioClientSetup.AddClient(client.Id);
                     leader.responsibility = "Receive user requests in desktop chat, plan, delegate and combine results.";
                     StudioWorkspace.Save();
                     StudioSkillCatalog.InstallBundle(leader);
@@ -121,7 +116,7 @@ namespace MCPForUnity.Editor.Tools
                 return new SuccessResponse("Connected as primary coordinator", new {
                     agentId = leader.id, role = "primary", workspace = Status(),
                     instructions = "Use request to record the user's goal with a stable idempotency_key, then claim it. Work directly or delegate self-contained tasks to configured workers. Inspect recent activity before relying on a worker. Read real results with get; complete the primary goal only after all required work is done. Continue in this desktop chat; no Unity Editor request is needed.",
-                    workerOnboarding = "Use add_agent then setup_client for an additional AI. Open its client session with the returned join prompt so it waits on its own endpoint. The Hub cannot wake an idle desktop chat or launch a model."
+                    workerOnboarding = "Team members are command-line AIs (Claude Code, Codex, Gemini CLI, ...). Use add_agent then setup_client for one. Open its CLI session with the returned join prompt so it waits on its own endpoint. The Hub cannot launch a model."
                 });
             }
             finally { configuring = false; }
@@ -139,7 +134,7 @@ namespace MCPForUnity.Editor.Tools
             {
                 bool running = StudioHubRuntime.IsRunning;
                 if (running) StudioHubRuntime.Stop();
-                var agent = string.IsNullOrWhiteSpace(name) ? StudioClientSetup.AddClient(client) : StudioWorkspace.Team.AddAgent(name, client);
+                var agent = StudioClientSetup.AddWorker(client, name);
                 agent.responsibility = (string)a["responsibility"] ?? "As assigned by the primary AI.";
                 StudioWorkspace.Save();
                 if (running) StudioHubRuntime.Start();

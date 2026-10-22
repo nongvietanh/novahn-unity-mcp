@@ -11,12 +11,13 @@ namespace MCPForUnityTests.Editor.Hub
     public class HubAgentRegistryTests
     {
         [Test]
-        public void AddAgent_FirstBecomesLeaderAndGetsBasePort()
+        public void AddAgent_FirstIsAWorkerAndGetsBasePort()
         {
             var registry = new HubAgentRegistry();
             var first = registry.AddAgent("Claude Code", "claude-code");
 
-            Assert.IsTrue(first.isLeader);
+            Assert.IsFalse(first.isLeader);
+            Assert.IsNull(registry.Leader);
             Assert.AreEqual(HubAgentRegistry.BasePort, first.port);
             Assert.AreEqual("claude-code", first.id);
             Assert.GreaterOrEqual(first.token.Length, 32);
@@ -35,7 +36,7 @@ namespace MCPForUnityTests.Editor.Hub
             Assert.AreEqual(ids.Distinct().Count(), ids.Count);
             Assert.AreEqual(ports.Distinct().Count(), ports.Count);
             Assert.AreEqual(new[] { 4317, 4318 }, ports.ToArray());
-            Assert.AreEqual(1, registry.agents.Count(a => a.isLeader));
+            Assert.AreEqual(0, registry.agents.Count(a => a.isLeader));
         }
 
         [Test]
@@ -52,15 +53,25 @@ namespace MCPForUnityTests.Editor.Hub
         }
 
         [Test]
-        public void RemoveAgent_PromotesANewLeader()
+        public void RemoveAgent_DoesNotPromoteAWorker()
         {
             var registry = new HubAgentRegistry();
             var leader = registry.AddAgent("A", "a");
             registry.AddAgent("B", "b");
+            registry.SetLeader(leader.id);
 
             registry.RemoveAgent(leader.id);
             Assert.AreEqual(1, registry.agents.Count);
-            Assert.IsTrue(registry.agents[0].isLeader);
+            Assert.IsNull(registry.Leader);
+        }
+
+        [Test]
+        public void SetLeader_RejectsUnknownAgent()
+        {
+            var registry = new HubAgentRegistry();
+            registry.AddAgent("A", "a");
+            Assert.Throws<System.ArgumentException>(() => registry.SetLeader("missing"));
+            Assert.IsNull(registry.Leader);
         }
 
         [Test]
@@ -99,11 +110,10 @@ namespace MCPForUnityTests.Editor.Hub
 
             var noLeader = new HubAgentRegistry();
             noLeader.AddAgent("A", "a");
-            noLeader.agents[0].isLeader = false;
             Assert.IsFalse(noLeader.IsValid(out _));
 
             var ok = new HubAgentRegistry();
-            ok.AddAgent("A", "a");
+            ok.SetLeader(ok.AddAgent("A", "a").id);
             ok.AddAgent("B", "b");
             Assert.IsTrue(ok.IsValid(out _));
         }

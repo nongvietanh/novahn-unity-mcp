@@ -21,8 +21,8 @@ namespace MCPForUnity.Editor.Services
         private const string CachedBetaVersionKey = EditorPrefKeys.LatestKnownVersion + ".beta";
         private const string LastAssetStoreCheckDateKey = EditorPrefKeys.LastAssetStoreUpdateCheck;
         private const string CachedAssetStoreVersionKey = EditorPrefKeys.LatestKnownAssetStoreVersion;
-        private const string MainPackageJsonUrl = "https://gitlab.com/novahn/unity-mcp/-/raw/main/MCPForUnity/package.json";
-        private const string BetaPackageJsonUrl = "https://gitlab.com/novahn/unity-mcp/-/raw/beta/MCPForUnity/package.json";
+        private const string MainPackageJsonUrl = "https://raw.githubusercontent.com/nongvietanh/novahn-unity-mcp/main/MCPForUnity/package.json";
+        private const string BetaPackageJsonUrl = "https://raw.githubusercontent.com/nongvietanh/novahn-unity-mcp/beta/MCPForUnity/package.json";
         private const string AssetStoreVersionUrl = "https://gqoqjkkptwfbkwyssmnj.supabase.co/storage/v1/object/public/coplay-images/assetstoreversion.json";
 
         /// <inheritdoc/>
@@ -345,7 +345,7 @@ namespace MCPForUnity.Editor.Services
         {
             try
             {
-                // GitLab API endpoints have rate limits, so read package.json directly instead.
+                // GitHub API endpoints have rate limits, so read package.json directly instead.
                 //
                 // We read package.json directly because:
                 // - It avoids relying on an API release endpoint

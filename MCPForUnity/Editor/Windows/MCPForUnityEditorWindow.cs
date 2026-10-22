@@ -81,28 +81,37 @@ namespace MCPForUnity.Editor.Windows
             pageSubtitle = rootVisualElement.Q<Label>("page-subtitle");
             connectionBadge = rootVisualElement.Q<Label>("connection-badge");
             rootVisualElement.Q<Label>("project-name").text = new System.IO.DirectoryInfo(StudioWorkspace.ProjectRoot).Name;
-            rootVisualElement.Q<Label>("version-label").text = "NOVAHN STUDIO  /  " + AssetPathUtility.GetPackageVersion();
+            rootVisualElement.Q<Label>("version-label").text = "Novahn Studio " + AssetPathUtility.GetPackageVersion();
             rootVisualElement.Q<Button>("console-button").clicked += AgentConsoleWindow.ShowWindow;
+            var updateStatus = rootVisualElement.Q<Label>("update-status");
+            var update = rootVisualElement.Q<Button>("update-button");
+            update.text = StudioText.T("Update");
+            update.tooltip = StudioText.T("Get the newest MCP for Unity code and restart the MCP server");
+            update.clicked += async () => {
+                update.SetEnabled(false);
+                try { await McpPackageUpdater.UpdateAsync(message => updateStatus.text = message); }
+                catch (Exception e) { updateStatus.text = e.Message; }
+                finally { update.SetEnabled(true); }
+            };
             var nav = rootVisualElement.Q("workspace-nav");
-            AddNavigation(nav, StudioPage.Overview, "01", StudioText.T("Overview"));
-            AddNavigation(nav, StudioPage.Team, "02", StudioText.T("AI Team"));
-            AddNavigation(nav, StudioPage.Tasks, "03", StudioText.T("Tasks"));
-            AddNavigation(nav, StudioPage.Skills, "04", StudioText.T("Skills"));
+            AddNavigation(nav, StudioPage.Overview, StudioText.T("Overview"));
+            AddNavigation(nav, StudioPage.Team, StudioText.T("AI Team"));
+            AddNavigation(nav, StudioPage.Tasks, StudioText.T("Tasks"));
+            AddNavigation(nav, StudioPage.Skills, StudioText.T("Skills"));
             var engineNav = rootVisualElement.Q("engine-nav");
-            AddNavigation(engineNav, StudioPage.Connection, "05", StudioText.T("Connection"));
-            AddNavigation(engineNav, StudioPage.Tools, "06", StudioText.T("Tools"));
-            AddNavigation(engineNav, StudioPage.Resources, "07", StudioText.T("Resources"));
-            AddNavigation(engineNav, StudioPage.AssetGen, "08", StudioText.T("Asset generation"));
-            AddNavigation(engineNav, StudioPage.Settings, "09", StudioText.T("Settings"));
+            AddNavigation(engineNav, StudioPage.Connection, StudioText.T("Connection"));
+            AddNavigation(engineNav, StudioPage.Tools, StudioText.T("Tools"));
+            AddNavigation(engineNav, StudioPage.Resources, StudioText.T("Resources"));
+            AddNavigation(engineNav, StudioPage.AssetGen, StudioText.T("Asset generation"));
+            AddNavigation(engineNav, StudioPage.Settings, StudioText.T("Settings"));
             created = true;
             Navigate(currentPage);
         }
 
-        private void AddNavigation(VisualElement parent, StudioPage page, string number, string title)
+        private void AddNavigation(VisualElement parent, StudioPage page, string title)
         {
             var button = new Button(() => Navigate(page)) { name = "nav-" + page.ToString().ToLowerInvariant() };
             button.AddToClassList("studio-nav-button");
-            button.Add(new Label(number) { pickingMode = PickingMode.Ignore, name = "nav-number" });
             button.Add(new Label(title) { pickingMode = PickingMode.Ignore });
             navigation[page] = button; parent.Add(button);
         }
