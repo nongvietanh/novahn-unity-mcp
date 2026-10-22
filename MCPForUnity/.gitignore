@@ -1,8 +1,12 @@
-__pycache__/
-*.pyc
-.venv/
-*.egg-info/
-build/
-dist/
-.pytest_cache/
+# Package Manager applies this file when it installs the package from Git, and on Windows it
+# matches case-insensitively: keep every rule anchored to the Python hub so it cannot drop
+# Unity sources (an unanchored "build/" emptied Editor/Tools/Build).
+Editor/StudioServer~/**/__pycache__/
+Editor/StudioServer~/**/*.pyc
+Editor/StudioServer~/.venv/
+Editor/StudioServer~/**/*.egg-info/
+Editor/StudioServer~/build/
+Editor/StudioServer~/dist/
+Editor/StudioServer~/.pytest_cache/
+Editor/StudioServer~/uv.lock
 !LICENSE.meta
