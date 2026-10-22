@@ -79,3 +79,11 @@ docs/superpowers/
 
 # Reference DLLs fetched by tools/compile-check.sh (not redistributable)
 .compile-refs/
+
+/Library
+/Assets
+/Logs
+/ProjectSettings
+/UserSettings
+/Temp
+/Packages

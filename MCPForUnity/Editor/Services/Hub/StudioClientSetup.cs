@@ -17,6 +17,34 @@ namespace MCPForUnity.Editor.Services.Hub
         public static List<IMcpClientConfigurator> AvailableClients() => MCPServiceLocator.Client.GetAllClients()
             .Where(c => c.SupportedTransports.Contains(ConfiguredTransport.Http) || c is JsonFileMcpConfigurator)
             .OrderBy(c => c.DisplayName).ToList();
+        // Command-line AIs, by client ID, that can run without a desktop window.
+        public static readonly IReadOnlyDictionary<string, string> CliExecutables = new Dictionary<string, string> {
+            ["claudecode"] = "claude", ["codex"] = "codex", ["geminicli"] = "gemini", ["githubcopilotcli"] = "copilot",
+            ["codebuddycli"] = "codebuddy", ["qwencode"] = "qwen", ["opencode"] = "opencode", ["kimicode"] = "kimi" };
+
+        public sealed class DetectedClient
+        {
+            public IMcpClientConfigurator Client;
+            public string CliPath;
+        }
+
+        public static List<IMcpClientConfigurator> CliClients() => AvailableClients().Where(c => CliExecutables.ContainsKey(c.Id)).ToList();
+
+        public static List<DetectedClient> ScanMachine() => ScanMachine(CliClients(), exe => ExecPath.FindInPath(exe));
+
+        // Team members run without a window, so only command-line AIs found on PATH qualify.
+        public static List<DetectedClient> ScanMachine(IEnumerable<IMcpClientConfigurator> clients, Func<string, string> findInPath)
+        {
+            var found = new List<DetectedClient>();
+            foreach (var client in clients)
+            {
+                if (!CliExecutables.TryGetValue(client.Id, out string exe)) continue;
+                string path = findInPath(exe);
+                if (!string.IsNullOrEmpty(path)) found.Add(new DetectedClient { Client = client, CliPath = path });
+            }
+            return found.OrderBy(d => d.Client.DisplayName).ToList();
+        }
+
         public static IMcpClientConfigurator RequireClient(string key) => AvailableClients().FirstOrDefault(c => c.Id == key)
             ?? throw new ArgumentException("Select a supported AI client.");
         private static string AutomaticName(IMcpClientConfigurator client, HubAgentEntry except = null)
@@ -26,10 +54,25 @@ namespace MCPForUnity.Editor.Services.Hub
             while (StudioWorkspace.Team.agents.Any(a => a != except && a.displayName == name)) name = client.DisplayName + " " + index++;
             return name;
         }
-        public static HubAgentEntry AddClient(string key)
+        public static HubAgentEntry AddWorker(string key, string name = null)
         {
             var client = RequireClient(key);
-            return StudioWorkspace.Team.AddAgent(AutomaticName(client), client.Id);
+            if (!CliExecutables.ContainsKey(client.Id)) throw new ArgumentException(StudioText.T("Team members must be command-line AIs."));
+            return StudioWorkspace.Team.AddAgent(string.IsNullOrWhiteSpace(name) ? AutomaticName(client) : name, client.Id);
+        }
+
+        /// <summary>The AI chatting with the user is the primary. Keeps the leader's id, port and token so its tasks stay valid.</summary>
+        public static HubAgentEntry ClaimPrimary(string key)
+        {
+            var client = RequireClient(key);
+            var leader = StudioWorkspace.Team.Leader;
+            if (leader == null)
+            {
+                leader = StudioWorkspace.Team.AddAgent(AutomaticName(client), client.Id);
+                StudioWorkspace.Team.SetLeader(leader.id);
+            }
+            else ChangeClient(leader, client.Id);
+            return leader;
         }
         public static void ChangeClient(HubAgentEntry agent, string key)
         {

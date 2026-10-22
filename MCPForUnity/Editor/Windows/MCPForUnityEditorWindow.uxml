@@ -2,10 +2,10 @@
     <ui:VisualElement name="novahn-studio" class="novahn-studio">
         <ui:VisualElement class="studio-sidebar">
             <ui:VisualElement class="studio-brand">
-                <ui:Label text="N/" class="studio-monogram" />
+                <ui:Label text="N" class="studio-monogram" />
                 <ui:VisualElement>
-                    <ui:Label text="NOVAHN" class="studio-wordmark" />
-                    <ui:Label text="UNITY STUDIO" class="studio-brand-caption" />
+                    <ui:Label text="Novahn" class="studio-wordmark" />
+                    <ui:Label text="Unity Studio" class="studio-brand-caption" />
                 </ui:VisualElement>
             </ui:VisualElement>
             <ui:Label text="WORKSPACE" class="studio-nav-heading" />
@@ -20,10 +20,12 @@
         <ui:VisualElement class="studio-workspace">
             <ui:VisualElement class="studio-topbar">
                 <ui:Label name="project-name" class="studio-project-name" />
-                <ui:Label text="/  AI WORKSPACE" class="studio-crumb" />
+                <ui:Label text="/  Novahn Studio" class="studio-crumb" />
                 <ui:VisualElement class="studio-spacer" />
+                <ui:Label name="update-status" class="studio-update-status" />
                 <ui:Label name="connection-badge" class="studio-connection-badge" />
                 <ui:DropdownField name="studio-language" tooltip="Language / Ngôn ngữ" />
+                <ui:Button name="update-button" text="Update" class="studio-button" />
                 <ui:Button name="console-button" text="AI Log ↗" class="studio-button" />
             </ui:VisualElement>
             <ui:VisualElement class="studio-page-header">
@@ -33,8 +35,6 @@
             <ui:VisualElement name="studio-content" class="studio-content" />
             <ui:VisualElement class="studio-footer">
                 <ui:Label name="version-label" />
-                <ui:VisualElement class="studio-spacer" />
-                <ui:Label text="NOVAHN  /  BUILD TOGETHER" />
             </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>

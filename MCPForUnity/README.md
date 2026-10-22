@@ -20,7 +20,7 @@ Xem [hướng dẫn import, manifest và kết nối AI đầy đủ](https://gi
 
 ## Sử dụng
 
-Mặc định **English**; chuyển **EN/VI** trên thanh đầu Studio. Chọn **Primary AI** bằng dropdown: Claude Desktop, Claude Code, Codex hoặc client được hỗ trợ; tên tự sinh, không mặc định Codex. Giao yêu cầu ngay trong ứng dụng AI qua Unity MCP: AI dùng `novahn_workspace` với đúng client để nhận vai trò, bật Hub, nhận mục tiêu và phân công. Không cần nhập lại yêu cầu trong Unity Editor. Cài skill `novahn-desktop` từ phần Setup để hướng dẫn AI sử dụng luồng này.
+Mặc định **English**; chuyển **EN/VI** trên thanh đầu Studio. AI bạn đang chat (Claude Desktop, Claude Code, Codex...) là AI chính; thành viên đội là các AI dạng CLI, quét được bằng nút **Scan AI on this machine**. Giao yêu cầu ngay trong ứng dụng AI qua Unity MCP: AI dùng `novahn_workspace` với client ID của chính nó để nhận vai trò AI chính, bật Hub, nhận mục tiêu và phân công. Không cần nhập lại yêu cầu trong Unity Editor. Cài skill `novahn-desktop` từ phần Setup để hướng dẫn AI sử dụng luồng này.
 
 - **Đội AI:** một AI chính và nhiều AI phụ; setup MCP và skill theo từng client.
 - **Công việc:** gửi mục tiêu, phân công, tách task, hẹn ngày giờ và xem kết quả.

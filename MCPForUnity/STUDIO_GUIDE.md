@@ -5,8 +5,8 @@ Workspace Unity cho một AI chính và nhiều AI phụ. Mở **Novahn → Stud
 ## Chọn đội AI
 
 1. Trong **Connection**, thiết lập Unity MCP và kết nối client tới Editor. HTTP Local cho phép nhiều client dùng chung Unity.
-2. Trong **AI Team**, chọn **Primary AI** bằng dropdown: Claude Desktop, Claude Code, Codex hoặc client khác trong danh sách. Không có lựa chọn mặc định; tên được tạo tự động.
-3. Thêm AI phụ bằng dropdown **AI client** và **+ Add AI**. Tên trùng được thêm số. Dropdown trên mỗi thẻ cho phép đổi client; vai trò có thể đổi bằng **Make primary AI**.
+2. **AI chính** là AI bạn đang chat (Claude Desktop, Claude Code, Codex...). Khi AI đó gọi `connect` với client ID của chính nó, nó trở thành AI chính; không cần chọn trong Unity. Đổi sang chat với AI khác rồi `connect` thì AI mới thay vai trò, các task cũ vẫn giữ.
+3. **Thành viên** phải là AI dạng CLI (Claude Code, Codex, Gemini CLI, Copilot CLI...). Bấm **Scan AI on this machine** để liệt kê các CLI có trong PATH rồi **+ Add AI**, hoặc chọn trong dropdown **AI client**. Tên trùng được thêm số.
 4. Bấm **Setup MCP + Skills** để merge cấu hình, giữ các server khác và tạo backup. Với client thủ công, dùng **Copy configuration**. Claude Desktop nhận cấu hình stdio proxy tới Hub và Unity HTTP.
 5. Bật Hub, mở/reconnect client và dùng **Join prompt** cho phiên nhận việc qua endpoint riêng.
 
@@ -16,7 +16,7 @@ Khi đổi đội hình đang chạy, Studio khởi động lại Hub để nạ
 
 Cài skill `novahn-desktop` và hướng dẫn AI dùng nó cho yêu cầu Unity. Với client đọc `AGENTS.md`, có thể thêm:
 
-> For substantive Unity requests, use the novahn-desktop skill and the existing Unity MCP connection to receive the goal directly from desktop chat. Do not require the user to re-enter it in Unity. Use the actual calling client ID and respect the selected primary AI.
+> For substantive Unity requests, use the novahn-desktop skill and the existing Unity MCP connection to receive the goal directly from desktop chat. Do not require the user to re-enter it in Unity. Use the actual calling client ID; the AI that connects becomes the primary.
 
 AI đọc `mcpforunity://custom-tools`, gọi `novahn_workspace` trực tiếp hoặc qua `execute_custom_tool`. `status.availableClients` cung cấp ID client. Ví dụ với Claude Code:
 
@@ -24,15 +24,15 @@ AI đọc `mcpforunity://custom-tools`, gọi `novahn_workspace` trực tiếp h
 {"action":"connect","arguments":{"client":"claudecode"}}
 ```
 
-Claude Desktop dùng `claudedesktop`, Codex dùng `codex`. Không suy đoán client khác hoặc nhận nhầm vai trò AI chính đã chọn. Nếu Hub đang khởi động, chờ theo `retryAfterSeconds` rồi lặp lại action với cùng khóa idempotency.
+Claude Desktop dùng `claudedesktop`, Codex dùng `codex`. Dùng đúng ID ứng dụng mình đang chạy, không giả danh client khác. Nếu Hub đang khởi động, chờ theo `retryAfterSeconds` rồi lặp lại action với cùng khóa idempotency.
 
 | Action | Mục đích |
 | --- | --- |
-| `status`, `connect` | Đọc workspace hoặc kết nối đúng AI chính và bật Hub. |
+| `status`, `connect` | Đọc workspace, hoặc nhận vai trò AI chính và bật Hub. |
 | `request`, `delegate` | Ghi nhận mục tiêu chat hoặc giao task tự chứa cho AI phụ. Cần `title`, `request`, `idempotency_key`; delegate cần `assignee`. |
 | `inbox`, `claim`, `get`, `complete`, `cancel` | Nhận việc, đọc tiến độ, trả kết quả thực tế và hủy. Các thao tác task dùng `task_id`; complete cần `result`. |
 | `events`, `messages`, `message`, `ack` | Theo dõi tiến độ và trao đổi trong đội. |
-| `add_agent`, `setup_client`, `install_skills` | Thêm client với tên tự sinh, thiết lập cấu hình hoặc cài skill. |
+| `add_agent`, `setup_client`, `install_skills` | Thêm thành viên AI dạng CLI với tên tự sinh, thiết lập cấu hình hoặc cài skill. |
 
 Gateway Unity MCP dành cho AI chính được tin cậy. AI phụ dùng endpoint Hub riêng, xác thực bằng token riêng, để gọi `hub.task.wait/inbox/claim/complete` và `hub.message.*`. Không dùng gateway để giả danh AI chính.
 

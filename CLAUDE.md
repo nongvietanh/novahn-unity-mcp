@@ -26,7 +26,7 @@ Scene, Assets, Scripts
 
 The Studio UI, desktop coordinator tool and role skills live in `MCPForUnity/Editor/`. Its bundled coordination runtime is `MCPForUnity/Editor/StudioServer~/`, launched separately from the shared Unity MCP server in `Server/`. It reuses that server's Unity bridge. Keep the bundled runtime with the UPM package; do not replace the shared server with it.
 
-The primary AI is chosen from supported clients (Claude Desktop, Claude Code, Codex, etc.); never assume Codex. Team dropdowns generate display names automatically. `novahn_workspace.connect` requires the actual caller's client ID and respects the selected primary. Stdio-only clients use the bundled `hub.stdio_proxy` to reach HTTP endpoints. See `MCPForUnity/STUDIO_GUIDE.md`.
+The primary AI is whichever supported client (Claude Desktop, Claude Code, Codex, etc.) the user is chatting with: calling `novahn_workspace.connect` with its own client ID makes it the primary, keeping the leader's id/port/token. Never assume Codex. Other team members must be command-line AIs (`StudioClientSetup.CliExecutables`); the AI Team scan lists only CLIs found on PATH. Display names are generated automatically. Stdio-only clients use the bundled `hub.stdio_proxy` to reach HTTP endpoints. See `MCPForUnity/STUDIO_GUIDE.md`.
 
 ### Three Layers on the Python Side
 

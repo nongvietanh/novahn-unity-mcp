@@ -40,7 +40,7 @@ namespace MCPForUnity.Editor.Services.Hub
 
         public HubAgentEntry Leader => agents.FirstOrDefault(agent => agent.isLeader);
 
-        /// <summary>Add an agent, allocating a free port and a fresh token. The first agent leads.</summary>
+        /// <summary>Add a worker, allocating a free port and a fresh token. Only <see cref="SetLeader"/> picks the leader.</summary>
         public HubAgentEntry AddAgent(string displayName, string clientKey)
         {
             string id = UniqueId(displayName, clientKey);
@@ -51,7 +51,6 @@ namespace MCPForUnity.Editor.Services.Hub
                 clientKey = clientKey,
                 port = NextFreePort(),
                 token = GenerateToken(),
-                isLeader = agents.Count == 0,
             };
             agents.Add(entry);
             return entry;
@@ -59,25 +58,14 @@ namespace MCPForUnity.Editor.Services.Hub
 
         public void RemoveAgent(string id)
         {
-            int index = agents.FindIndex(agent => agent.id == id);
-            if (index < 0) return;
-            bool wasLeader = agents[index].isLeader;
-            agents.RemoveAt(index);
-            // Keep exactly one leader while any agent remains.
-            if (wasLeader && agents.Count > 0 && !agents.Any(agent => agent.isLeader))
-                agents[0].isLeader = true;
+            // A worker never inherits the leader role: the chatting AI claims it by connecting.
+            agents.RemoveAll(agent => agent.id == id);
         }
 
         public void SetLeader(string id)
         {
-            bool found = false;
-            foreach (var agent in agents)
-            {
-                agent.isLeader = agent.id == id;
-                found |= agent.isLeader;
-            }
-            if (!found && agents.Count > 0)
-                agents[0].isLeader = true;
+            if (!agents.Any(agent => agent.id == id)) throw new ArgumentException("Unknown agent: " + id);
+            foreach (var agent in agents) agent.isLeader = agent.id == id;
         }
 
         public int NextFreePort()
@@ -124,7 +112,7 @@ namespace MCPForUnity.Editor.Services.Hub
             if (ports.Distinct().Count() != ports.Count)
             { error = "Agent ports must be distinct and must not use the bridge port."; return false; }
             if (agents.Count(a => a.isLeader) != 1)
-            { error = "Pick exactly one leader."; return false; }
+            { error = "Connect from your chat AI first: it becomes the primary AI."; return false; }
             error = null;
             return true;
         }
